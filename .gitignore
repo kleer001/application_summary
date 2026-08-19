@@ -1,0 +1,13 @@
+# Source PDFs and OCR output are large; they live with the release, not in the repo.
+*.pdf
+!A-2021-00215_CBL_pdf/*.pdf
+!AOR-2026-00383_pdf/*.pdf
+!emr-placer-guidebook-mitigation-measures_pdf/*.pdf
+
+# Office lock files
+.~lock.*#
+
+# Working artefacts
+segs*.json
+build_stats.json
+__pycache__/
