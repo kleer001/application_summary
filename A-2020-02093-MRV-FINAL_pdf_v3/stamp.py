@@ -25,6 +25,19 @@ EQUIVALENT = {
 }
 
 
+def out_dir(sandbox):
+    """Where a sandbox keeps reader output.
+
+    A sandbox staged by `wave.py` keeps it in `out/`; the repository keeps the
+    accumulated run in `run2/out/`. Resolve rather than assume — guessing wrong
+    fails at the end of a night, after the reads are already paid for.
+    """
+    for candidate in (f"{sandbox}/out", f"{sandbox}/run2/out"):
+        if os.path.isdir(candidate):
+            return candidate
+    raise SystemExit(f"no output directory under {sandbox} (tried out/, run2/out/)")
+
+
 def sha(path):
     return hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
 
@@ -40,10 +53,11 @@ def pass_of(name):
 
 def stamp(sandbox):
     now, done, already = current(), 0, 0
-    for name in sorted(os.listdir(f"{sandbox}/out")):
+    od = out_dir(sandbox)
+    for name in sorted(os.listdir(od)):
         if not name.endswith(".json"):
             continue
-        path = f"{sandbox}/out/{name}"
+        path = f"{od}/{name}"
         doc = json.load(open(path))
         if "contract" in doc:
             already += 1
@@ -55,10 +69,10 @@ def stamp(sandbox):
 
 
 def survey(sandbox):
-    seen = {}
-    for name in sorted(os.listdir(f"{sandbox}/out")):
+    seen, od = {}, out_dir(sandbox)
+    for name in sorted(os.listdir(od)):
         if name.endswith(".json"):
-            doc = json.load(open(f"{sandbox}/out/{name}"))
+            doc = json.load(open(f"{od}/{name}"))
             seen.setdefault(doc.get("contract", "UNSTAMPED"), []).append(name)
     return seen
 

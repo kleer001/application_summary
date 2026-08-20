@@ -8,6 +8,25 @@ Everything you need is in this repository. Do not look for the source release: i
 is 340 MB and is not here. The documents have already been cut into per-document
 excerpts under `staged/`, and that is all a reader ever sees.
 
+## 0. Make the scans readable
+
+```
+pdftoppm -v >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq poppler-utils)
+pdftoppm -v
+```
+
+**If this fails, stop and report it. Do not read anything.** Without `poppler-utils`
+a reader cannot render the page images, and the sandbox is otherwise silent about
+it: the PDF read returns an error the reader is free to shrug off, and it will go on
+to answer from the text layer alone while still recording that it corroborated its
+answers against the scan. Measured on a probe run, every one of 35 entries claimed
+`source: "both"` on a document whose scan had never been rendered.
+
+The text layer is a lossy machine transcription. Readers use the scan to recover
+`m²` from `m°`, `1er` from `1°`, and section numbers the text layer drops entirely.
+A night that runs without it produces answers that are worse and that misreport
+where they came from.
+
 ## 1. Ask what is outstanding
 
 From the repository root:
