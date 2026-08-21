@@ -8,9 +8,6 @@ left empty and the reason is on the Review_Queue.
 import json, os, re, sys
 from collections import Counter, defaultdict
 
-import openpyxl
-from openpyxl.styles import Font
-
 from combine import combine_field, union_conditions
 from verify import check_conditions, check_field, load_pages, verdicts_for
 
@@ -392,6 +389,13 @@ def assemble(sandbox):
 
 
 def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=None):
+    # Imported here rather than at the top so that finding conflicts, which is
+    # the front half of this module and needs no spreadsheet, runs on the
+    # standard library alone. A reading night has no openpyxl and does not
+    # need one to hand its disagreements to an adjudicator.
+    import openpyxl
+    from openpyxl.styles import Font
+
     labelled = labelled or {}
     used = {src for _, src in PRIOR if not src.startswith(("@", "-"))}
     extended = [n for n in spec if n not in used]
@@ -536,12 +540,24 @@ def write_conflicts(sandbox, queue):
     return open_
 
 
-def build(sandbox, out_path):
+def open_conflicts(sandbox):
+    """Combine the readers and file what they disagreed about.
+
+    The front half of build(). Separated because it needs no spreadsheet and
+    none of its dependencies, so a night that has just read can hand its
+    conflicts to an adjudicator instead of waiting for the corpus to finish and
+    a workbook to be assembled. Returns the assembled parts build() goes on to
+    write, and the conflicts nothing has settled.
+    """
     rows, docs, queue, discrepancies = assemble(sandbox)
     queue = dedupe(queue)
     for q in queue:
         q["kind"] = NOTE if q["resolved"] else classify_queue(q)
-    write_conflicts(sandbox, queue)
+    return (rows, docs, queue, discrepancies), write_conflicts(sandbox, queue)
+
+
+def build(sandbox, out_path):
+    (rows, docs, queue, discrepancies), _ = open_conflicts(sandbox)
     spec = list(json.load(open(f"{sandbox}/fields.json")))
     write_workbook(rows, docs, queue, discrepancies, spec, out_path, labels(sandbox))
     return {"rows": len(rows), "documents": len(docs),
