@@ -93,7 +93,55 @@ This records on each new file which contract version produced it. Without it, a
 later contract change cannot be told from an earlier one and the whole corpus has
 to be re-read to be sure.
 
-## 4. Confirm from the files, not from memory
+## 4. Settle what the readers disagreed about
+
+```
+python3 A-2020-02093-MRV-FINAL_pdf_v3/conflicts.py A-2020-02093-MRV-FINAL_pdf_v3/run2
+python3 A-2020-02093-MRV-FINAL_pdf_v3/passc.py A-2020-02093-MRV-FINAL_pdf_v3/run2
+```
+
+Both exit 3 when they have nothing outstanding. If either does, go straight to
+the commit. Neither builds the workbook and neither needs anything but the
+standard library.
+
+`passc.py` prints one line per adjudication, capped by `adjudications_per_night`,
+tab-separated:
+
+```
+stem <TAB> field <TAB> model <TAB> brief <TAB> fields <TAB> slice <TAB> pdf <TAB> out
+```
+
+Spawn one `page-reader` subagent per line, on the model in column 3, and hand it
+exactly this:
+
+```
+Adjudicate one disagreement between two readers of an authorization document.
+
+Your instructions are the contract file. Read it first and follow it exactly.
+
+- contract: A-2020-02093-MRV-FINAL_pdf_v3/contract_c.md
+- the disagreement, with both readers' answers and what each cited: <column 4>
+- field specification: <column 5>
+- text excerpt: <column 6>
+- PDF of the same pages: <column 7>
+- output path: <column 8>
+
+The document id and the field are in the brief. Pages are numbered from 1, as in
+the excerpt and the PDF. Write only the output path above. If you cannot write
+it, say so plainly and do not write anywhere else.
+```
+
+Adjudicators reply `done`, for the same reason readers do. An adjudicated answer
+is checked against the page it cites exactly as a reader's is, when the workbook
+is next built; one that cannot be found there is discarded and the conflict
+stands. So there is nothing to review here, and nothing to take back into your
+context.
+
+A conflict is listed only while no ruling for it exists, and only while both of
+its reads are on a contract still in force. Documents waiting to be re-read are
+held back rather than settled against answers that are about to change.
+
+## 5. Confirm from the files, not from memory
 
 ```
 python3 A-2020-02093-MRV-FINAL_pdf_v3/nightly.py --status
@@ -103,7 +151,7 @@ The count it prints is the truth about this run. An agent's own account of what 
 did is not evidence — readers have been observed reporting success while writing
 nowhere.
 
-## 5. Commit and push
+## 6. Commit and push
 
 The sandbox is discarded when you finish. Work that is not pushed is lost, and a
 read cannot be reproduced — re-running produces a different answer, not the same
@@ -115,24 +163,28 @@ branch, do not fast-forward one, and do not trust `git log main`. Push the commi
 you just made straight to the remote branch:
 
 ```
-git add A-2020-02093-MRV-FINAL_pdf_v3/run2/out
-git commit -m "read <n> documents"
+git add A-2020-02093-MRV-FINAL_pdf_v3/run2
+git commit -m "read <n> documents, settled <m> conflicts"
 git push origin HEAD:main
 ```
 
 If that push is rejected as non-fast-forward, the checkout was behind the remote.
 Report it and stop; do not merge, rebase or force.
 
-## 6. Report
+## 7. Report
 
-One short paragraph: how many reads landed, how many remain, and anything that
-failed. Do not restate what the documents said.
+One short paragraph: how many reads landed, how many adjudications were settled,
+how many remain, and anything that failed. Do not restate what the documents
+said and do not report what any adjudicator decided.
 
 ## What not to do
 
 - Do not edit the contracts, the field specification, or the work order.
 - Do not run `build.py`, `qc.py` or `score.py`. They need dependencies that are not
-  installed here and they are not part of a reading night.
+  installed here and they are not part of a night's work. `conflicts.py` imports
+  `build.py` and that is fine: it uses the half that finds disagreements, not the
+  half that writes a spreadsheet.
 - Do not open the prior summary workbook. It is a test set, and nothing but
   `score.py` may read it.
-- Do not raise `documents_per_night` in `nightly.json` on your own initiative.
+- Do not raise `documents_per_night` or `adjudications_per_night` in `nightly.json`
+  on your own initiative.
