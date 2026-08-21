@@ -9,6 +9,7 @@ import json, os, re, sys
 from collections import Counter, defaultdict
 
 from combine import combine_field, heading_disputes, union_conditions
+from ids import corrected
 from verify import check_conditions, check_field, load_pages, verdicts_for
 
 # The prior summary's 30 columns, in its order, each naming what fills it.
@@ -235,7 +236,8 @@ def read_document(order, queue):
                         f"as a heading introducing the numbers beneath it"),
                 "resolved": False})
 
-    return {"doc_id": order["doc_id"], "file_number": order["file_number"],
+    return {"doc_id": order["doc_id"],
+            "file_number": corrected(order["stem"], order["file_number"]),
             "first": order["first_page"], "last": order["last_page"],
             "language": order["language"], "fields": fields,
             "conditions": union_conditions(*kept, headings=headings)}
@@ -409,7 +411,9 @@ def assemble(sandbox):
         seen.add(o["stem"])
         docs.append(read_document(o, queue))
     for q in queue:
-        q["file_number"] = q["document"].split("#")[0]
+        # The queue is read by file number, so it has to move with the row.
+        q["file_number"] = corrected(q["document"].replace("#", "_"),
+                                     q["document"].split("#")[0])
 
     by_fn = defaultdict(list)
     for d in docs:
