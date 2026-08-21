@@ -12,6 +12,7 @@
 
 # Working artefacts
 segs*.json
+!A-2020-02093-MRV-FINAL_pdf_v3/segs.json
 !A-2020-02093-MRV-FINAL_pdf_v3/staged/wave.json
 build_stats.json
 __pycache__/
