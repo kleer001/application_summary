@@ -52,3 +52,36 @@ treating the parent as a heading. The contract's rule that "a number earns an en
 when dropping it would lose a requirement" settles this in principle, but readers
 do not apply it consistently, which is the signal that it is not stated plainly
 enough to survive contact with the forms.
+
+## contract_a: `source` asserts something nothing can check
+
+Every entry carries `source: text|image|both`. `both` asserts the reader
+corroborated its answer against the scan. Nothing verifies that assertion, and
+the failure it hides is real: a read whose PDF render had errored recorded
+`both` on all 35 of its entries and answered from the OCR layer alone.
+
+Measured over the pass-A reads banked so far — 88 reads, 3390 entries:
+
+| claim   | entries |
+|---------|---------|
+| `both`  | 2846 |
+| `image` | 529 |
+| `text`  | 15 |
+
+The claim can be confirmed but not refuted. A quote that is *not* in the OCR
+layer proves the reader used the scan, and 69 of 88 reads carry at least one.
+The absence of such a quote proves nothing: it is equally what a clean page
+looks like. Fourteen reads claim `both` on every entry, and of those only three
+carry no positive sign of the scan — and one of the three is from a run where
+the scan was demonstrably rendered, because the driver's own transcript shows
+the page images coming back.
+
+So a read that answered from text alone while claiming corroboration cannot be
+picked out of the corpus after the fact, and re-reading on suspicion would mean
+re-reading reads that are fine.
+
+**The field is a reader's annotation and is not evidence.** Do not gate anything
+on it, do not report it as provenance, and do not use it to decide what to
+re-read. What actually holds the line is upstream and mechanical: a night that
+cannot render the scans refuses to read at all, and every quote is checked
+against the page it cites whatever the reader says about where it came from.
