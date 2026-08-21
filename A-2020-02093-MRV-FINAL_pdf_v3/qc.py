@@ -39,7 +39,7 @@ def control(sandbox, xlsx):
     by_stem = {o["stem"]: o for o in orders}
 
     findings, checked = [], Counter()
-    rejected, rejected_conditions = {}, set()
+    rejected, rejected_conditions, verified = {}, set(), set()
 
     # 1. every reader answer that reached a cell verified against its own page
     for stem, o in by_stem.items():
@@ -51,6 +51,8 @@ def control(sandbox, xlsx):
                 if verdict in ("REJECT", "MALFORMED"):
                     rejected.setdefault((o["file_number"], name), []).append(
                         f"{stem} {tag}")
+                elif verdict in ("pass", "QUEUE"):
+                    verified.add((o["file_number"], name))
         for tag in ("b1", "b2"):
             doc = json.load(open(f"{sandbox}/out/{stem}.{tag}.json"))
             for num, verdict, _ in check_conditions(doc, o["slice"]):
@@ -109,7 +111,12 @@ def control(sandbox, xlsx):
     for r in rows:
         fn = r[ix["DFO_File_or_PATH"]]
         for src, col in fieldcol.items():
-            if (fn, src) in rejected and r[ix[col]] not in (None, ""):
+            # One reader failing is not a failed cell. The build discards that
+            # reader and keeps the other, so the cell holds an answer that did
+            # verify. What this looks for is a filled cell with no verified
+            # answer behind it at all.
+            if ((fn, src) in rejected and (fn, src) not in verified
+                    and r[ix[col]] not in (None, "")):
                 findings.append(("a cell holds a value that failed verification",
                                  f"{fn} {col}"))
     # Check the text the workbook actually carries, not the readers' drafts of it:

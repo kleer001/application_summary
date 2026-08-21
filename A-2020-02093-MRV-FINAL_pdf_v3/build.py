@@ -58,7 +58,17 @@ def cell(entries):
         return total[0]["value"]
     if len(entries) == 1:
         return entries[0]["value"]
-    return "; ".join(str(e["value"]) for e in entries)
+    # One value said twice is one value. A reader that quotes the same figure
+    # from two places returns two entries, and joining them produced cells like
+    # "17-HQUE-00044; 17-HQUE-00044" — which for the column that keys the row
+    # meant the row could not be found by its own file number.
+    seen, out = set(), []
+    for e in entries:
+        v = str(e["value"])
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out[0] if len(out) == 1 else "; ".join(out)
 
 
 def absolutise(doc, first):
