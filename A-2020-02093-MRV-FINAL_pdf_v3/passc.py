@@ -30,6 +30,7 @@ Exit status is 0 while adjudications remain and 3 when none do.
 """
 import json, os, re, sys
 
+from combine import norm_number
 from stamp import EQUIVALENT, current, survey
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +75,33 @@ def entries_as_written(out_dir, stem, tag, field):
     return (doc.get("fields", {}).get(field) or {}).get("entries") or []
 
 
+def conditions_of(out_dir, stem, tag):
+    path = os.path.join(out_dir, f"{stem}.{tag}.json")
+    if not os.path.exists(path):
+        return []
+    return json.load(open(path)).get("conditions") or []
+
+
+def heading_brief(out_dir, stem, number, order):
+    """The disputed line and the numbers beneath it, from whichever reader kept them.
+
+    A reader that read the line as a heading did not write it down, so its text
+    comes from the one that did. The children come from both, because either may
+    have recorded a given child and the adjudicator needs the whole family to see
+    whether the parent binds anything they do not.
+    """
+    line, children = None, {}
+    for tag in ("b1", "b2"):
+        for c in conditions_of(out_dir, stem, tag):
+            num = norm_number(c.get("number"))
+            entry = {"number": c.get("number"), "page": c.get("page"), "text": c.get("text")}
+            if num == number and line is None:
+                line = entry
+            elif num.startswith(number + "."):
+                children.setdefault(num, entry)
+    return line, [children[k] for k in sorted(children, key=lambda n: [int(x) for x in n.split(".")])]
+
+
 def briefs(sandbox):
     """Every unsettled field conflict, as (work order line, brief written)."""
     conflicts = json.load(open(f"{sandbox}/conflicts.json"))
@@ -84,11 +112,13 @@ def briefs(sandbox):
     live = on_a_live_contract(sandbox)
     lines, other, stale = [], 0, 0
     for c in conflicts:
-        if not c["why"].startswith("different answers"):
+        heading = c["field"].startswith("heading ")
+        if not heading and not c["why"].startswith("different answers"):
             other += 1
             continue
         stem = c["document"].replace("#", "_")
-        if not all(f"{stem}.{t}.json" in live for t in ("a1", "a2")):
+        reads = ("b1", "b2") if heading else ("a1", "a2")
+        if not all(f"{stem}.{t}.json" in live for t in reads):
             stale += 1
             continue
         order = orders.get(stem)
@@ -104,9 +134,16 @@ def briefs(sandbox):
             "field": c["field"],
             "pages": [1, order["last_page"] - order["first_page"] + 1],
             "disagreement": c["why"],
-            "reader_1": entries_as_written(out_dir, stem, "a1", c["field"]),
-            "reader_2": entries_as_written(out_dir, stem, "a2", c["field"]),
         }
+        if heading:
+            number = c["field"].split(" ", 1)[1]
+            line, children = heading_brief(out_dir, stem, number, order)
+            brief.update(question="Is this number a condition, or a heading for the "
+                                  "numbers beneath it?",
+                         number=number, line=line, children=children)
+        else:
+            brief.update(reader_1=entries_as_written(out_dir, stem, "a1", c["field"]),
+                         reader_2=entries_as_written(out_dir, stem, "a2", c["field"]))
         brief_path = os.path.join(brief_dir, name)
         json.dump(brief, open(brief_path, "w"), indent=1, ensure_ascii=False)
         lines.append((stem, c["field"], MODEL, brief_path,

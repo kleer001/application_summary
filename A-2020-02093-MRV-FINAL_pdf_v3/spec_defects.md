@@ -66,13 +66,45 @@ when dropping it would lose a requirement" settles this in principle, but reader
 do not apply it consistently, which is the signal that it is not stated plainly
 enough to survive contact with the forms.
 
-**Open.** The ruling that conditions are requirements decides this case too — a
-parent stating a requirement of its own is one, and a bare label is not — but
-unlike the not-applicable question there is no way to apply it to reads already
-taken. Whether a parent carried its own requirement is not recoverable from the
-entry a reader chose to write; only re-reading settles it. So the wording is left
-alone until the re-read, rather than changed now and quietly disagreeing with
-every read banked under it.
+**Settled: a condition is a specific individual deliverable.** Something to be
+done, submitted, built, monitored or stopped, that somebody could be held to. A
+line that announces what is coming and leaves the doing to the numbers below it
+is a heading, however it is phrased — the word *shall* does not settle it,
+because umbrella lines are routinely written as obligations. The test is whether
+dropping the line would lose a deliverable that is not already stated beneath it.
+
+The worked case is `17-HCAA-01316_409` at 5.2, which is a **heading**:
+
+> **5.2** List of reports to be provided to DFO: The Proponent shall report to DFO
+> on whether the offsetting measures were conducted ... by providing the following:
+> > **5.2.1** A post-construction monitoring report ... by March 31, 2022.
+> > **5.2.2** Offsetting monitoring reports ... by December 31 (2022–2026).
+
+It points at the list; the children carry the reports and the dates.
+
+**How the ruling reaches the reads already taken.** Not by re-reading. Where the
+two readers disagreed, the line's text survives in the answer of whichever reader
+kept it, so the evidence needed to decide is already on disk. `heading_disputes`
+in `combine.py` finds every number one reader recorded and the other passed over
+that has children beneath it — 34 of them over 9 documents — and each is queued as
+a decision for pass C. `contract_c.md` carries the rule and the worked example,
+and a ruling of `heading` drops the number from the union.
+
+Only the disagreements are recoverable this way. A parent that *both* readers
+dropped, and that did carry its own deliverable, leaves no trace on disk and would
+need the page read again. It is also invisible, so nothing here counts it.
+
+**Still to do at the re-read.** `contract_b.md` is deliberately not changed. Its
+current wording is the reason readers split, but rewording it now would mark every
+pass B read as produced under different instructions, and the rewording cannot be
+applied backwards the way the not-applicable rule was. Adopt "a condition is a
+specific individual deliverable", with the 5.2 example, when the corpus is re-read.
+
+**Known understatement.** One numbered line can hold more than one deliverable —
+two reports on different dates written into a single number. It stays one entry,
+because the number is what makes an entry findable on its page, so a count of
+conditions is a count of numbered items and is a floor on the deliverables. Pass C
+is asked to say so in its reason where it sees one.
 
 ## contract_a: `source` asserts something nothing can check
 

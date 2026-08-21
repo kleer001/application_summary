@@ -204,7 +204,8 @@ def workload(xlsx):
     kinds = Counter()
     for r in decisions:
         why = str(r[3])
-        kinds["a condition whose text is not on its cited page" if "does not appear" in why
+        kinds["a number one reader read as a heading" if "as a heading introducing" in why
+              else "a condition whose text is not on its cited page" if "does not appear" in why
               else "a field conflict pass C has not settled" if "conflict" in why or "different answers" in why
               else "a field neither reader verified" if "neither reader" in why
               else "pass C could not settle it" if "could not settle" in why

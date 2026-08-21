@@ -8,7 +8,7 @@ left empty and the reason is on the Review_Queue.
 import json, os, re, sys
 from collections import Counter, defaultdict
 
-from combine import combine_field, union_conditions
+from combine import combine_field, heading_disputes, union_conditions
 from verify import check_conditions, check_field, load_pages, verdicts_for
 
 # The prior summary's 30 columns, in its order, each naming what fills it.
@@ -204,10 +204,31 @@ def read_document(order, queue):
                         if v == "QUEUE" else "text does not appear on the page it cites"),
                 "resolved": False})
 
+    # A number one reader recorded and the other read as a heading. The union
+    # keeps it either way, so unless it is queued here nobody is ever asked.
+    headings = set()
+    for num, tag, _ in heading_disputes(*kept):
+        name = f"heading {num}"
+        ruling = ruled.get(name)
+        verdict = (ruling or {}).get("winner")
+        if verdict in ("heading", "condition"):
+            if verdict == "heading":
+                headings.add(num)
+            queue.append({
+                "document": order["doc_id"], "field": name,
+                "why": f'pass C: {num} is a {verdict} — {(ruling.get("reason") or "")[:100]}',
+                "resolved": True})
+        else:
+            queue.append({
+                "document": order["doc_id"], "field": name,
+                "why": (f"reader {tag} recorded {num} as a condition; the other read it "
+                        f"as a heading introducing the numbers beneath it"),
+                "resolved": False})
+
     return {"doc_id": order["doc_id"], "file_number": order["file_number"],
             "first": order["first_page"], "last": order["last_page"],
             "language": order["language"], "fields": fields,
-            "conditions": union_conditions(*kept)}
+            "conditions": union_conditions(*kept, headings=headings)}
 
 
 def merge_documents(docs, discrepancies):

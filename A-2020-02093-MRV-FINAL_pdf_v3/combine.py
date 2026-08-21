@@ -94,7 +94,33 @@ def norm_number(n):
     return ".".join(re.findall(r"\d+", str(n or "")))
 
 
-def union_conditions(ca, cb):
+def heading_disputes(ca, cb):
+    """Numbers one reader recorded and the other passed over as a heading.
+
+    Only numbers that have children. A number with nothing beneath it that one
+    reader missed is a lapse and the union covers it. A number with children is
+    the case neither reader misread: one took it as binding on its own, the
+    other as introducing the items below. The union silently keeps it, so
+    without this the disagreement never reaches anybody.
+
+    Returns (number, reader who recorded it, that reader's entry).
+    """
+    sides = {}
+    for tag, side in (("1", ca), ("2", cb)):
+        sides[tag] = {norm_number(c.get("number")): c for c in (side or [])
+                      if states_a_requirement(c.get("text")) and norm_number(c.get("number"))}
+    every = set(sides["1"]) | set(sides["2"])
+    out = []
+    for tag, other in (("1", "2"), ("2", "1")):
+        for num, c in sides[tag].items():
+            if num in sides[other]:
+                continue
+            if any(o != num and o.startswith(num + ".") for o in every):
+                out.append((num, tag, c))
+    return sorted(out, key=lambda r: [int(x) for x in r[0].split(".")])
+
+
+def union_conditions(ca, cb, headings=None):
     """Every numbered requirement either reader found, at the finest numbering used.
 
     Numbered, and a requirement: an item answering "not applicable" is a number
@@ -112,6 +138,9 @@ def union_conditions(ca, cb):
             seen[key] = dict(c)
         elif len(str(c.get("text") or "")) > len(str(seen[key].get("text") or "")):
             seen[key].update(c)                            # keep the fuller text
+
+    for num in headings or ():
+        seen.pop(num, None)                            # settled: introduces its children
 
     folded = {k: fold(c.get("text")) for k, c in seen.items()}
     kept = []
