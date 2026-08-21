@@ -79,6 +79,10 @@ re-read on every turn you take afterwards.
 If a reader reports it could not write its output path, record that and continue.
 A missing file is simply outstanding again on the next run.
 
+Output files appear one at a time while readers are still running, so a hook or a
+check may report untracked files mid-run. That is expected. Committing is step 5 and
+happens once, after every reader has finished and `stamp.py` has run.
+
 ## 3. Stamp what landed
 
 ```
@@ -105,11 +109,19 @@ The sandbox is discarded when you finish. Work that is not pushed is lost, and a
 read cannot be reproduced — re-running produces a different answer, not the same
 one again.
 
+The sandbox comes up on a detached HEAD, and its `main` and `origin/main` refs are
+stale — they point at an older commit than the checkout itself. Do not check out a
+branch, do not fast-forward one, and do not trust `git log main`. Push the commit
+you just made straight to the remote branch:
+
 ```
 git add A-2020-02093-MRV-FINAL_pdf_v3/run2/out
 git commit -m "read <n> documents"
-git push
+git push origin HEAD:main
 ```
+
+If that push is rejected as non-fast-forward, the checkout was behind the remote.
+Report it and stop; do not merge, rebase or force.
 
 ## 6. Report
 
