@@ -35,9 +35,14 @@ From the repository root:
 python3 A-2020-02093-MRV-FINAL_pdf_v3/nightly.py
 ```
 
-**If it exits 3, stop.** The corpus is fully read. Do nothing else, commit nothing,
-and say so in one line. This is the expected ending, not a failure — the schedule
-keeps firing after the work is finished and each firing costs nothing.
+**If it exits 3, there is nothing left to read.** Skip steps 2 and 3 and go
+straight to step 4: a corpus that has been read through is not a corpus whose
+disagreements are settled, and adjudication outlasts reading by some nights.
+
+The ending is when step 1 and step 4 *both* have nothing outstanding. On such a
+night, commit nothing and say so in one line. That is the expected ending and not
+a failure — the schedule keeps firing after the work is done and a firing that
+does nothing costs nothing.
 
 Otherwise it prints one line per read, tab-separated:
 
@@ -100,8 +105,9 @@ python3 A-2020-02093-MRV-FINAL_pdf_v3/conflicts.py A-2020-02093-MRV-FINAL_pdf_v3
 python3 A-2020-02093-MRV-FINAL_pdf_v3/passc.py A-2020-02093-MRV-FINAL_pdf_v3/run2
 ```
 
-Both exit 3 when they have nothing outstanding. If either does, go straight to
-the commit. Neither builds the workbook and neither needs anything but the
+Both exit 3 when they have nothing outstanding. If either does, there is nothing
+to adjudicate tonight: go to step 5 if reads landed, or finish as described in
+step 1 if none did. Neither builds the workbook and neither needs anything but the
 standard library.
 
 `passc.py` prints one line per adjudication, capped by `adjudications_per_night`,
