@@ -71,17 +71,42 @@ def combine_field(fa, fb, verdict_a, verdict_b):
     return entries, note, verdict != "conflict"
 
 
+# A numbered item answering "not applicable" states no requirement, and a
+# condition is a requirement of the authorization. Observed as a label followed
+# by the marker, in both languages and with the accent and the full stop coming
+# and going: 29 such entries over 18 distinct wordings in the reads banked so
+# far. The payload is what follows the label, so a requirement that merely
+# mentions one of these words is untouched.
+NOT_APPLICABLE = {"na", "n/a", "notapplicable", "notapplicablena", "so", "s/o",
+                  "nesappliquepas", "sansobjet", "aucun", "aucune", "nil", "none"}
+
+
+def states_a_requirement(text):
+    """False for a numbered item whose whole answer is "not applicable"."""
+    t = (text or "").strip()
+    payload = t.rsplit(":", 1)[1] if ":" in t else t
+    folded = re.sub(r"[^a-z0-9/]", "", payload.lower().replace("\u2019", "").replace("'", ""))
+    return folded not in NOT_APPLICABLE
+
+
 def norm_number(n):
     """4.2, 42 and 4,2 are one condition number."""
     return ".".join(re.findall(r"\d+", str(n or "")))
 
 
 def union_conditions(ca, cb):
-    """Every numbered item either reader found, at the finest numbering used."""
+    """Every numbered requirement either reader found, at the finest numbering used.
+
+    Numbered, and a requirement: an item answering "not applicable" is a number
+    the form printed, not an obligation the authorization imposes. Dropping it
+    here rather than asking each reader to drop it means the answer no longer
+    depends on which reader was more literal — the union used to resolve the
+    disagreement silently in favour of keeping them.
+    """
     seen = {}
     for c in list(ca or []) + list(cb or []):
         key = norm_number(c.get("number"))
-        if not key:
+        if not key or not states_a_requirement(c.get("text")):
             continue
         if key not in seen:
             seen[key] = dict(c)

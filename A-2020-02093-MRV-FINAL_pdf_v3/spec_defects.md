@@ -33,10 +33,23 @@ includes survives whatever the other did. The effective behaviour is therefore
 "included" no matter which reading is more common — the disagreement does not
 surface as a conflict, it silently resolves in one direction.
 
-What has to be decided is whether `Conditions` is a list of *obligations* or a
-transcription of the document's *numbering*. Both are legitimate records and they
-are not the same sheet. Until the contract says which, the count of conditions per
-document is not a stable quantity.
+**Settled: conditions are requirements of the authorization.** `Conditions` is a
+list of obligations, not a transcription of the document's numbering, so an item
+answering "not applicable" is not one. `contract_b.md` now says so, and
+`combine.py` applies it to every read rather than relying on each reader to.
+
+Applying it downstream is what makes the ruling reach the reads already banked.
+The union kept a not-applicable item whenever either reader recorded one; the
+filter drops it whichever reader recorded it, so the count no longer depends on
+which reader was more literal and nothing has to be read again.
+
+Measured over the reads banked so far: 29 entries across 18 distinct wordings are
+the marker and nothing else, in both languages and with the accent and the full
+stop coming and going. The workbook goes from 2348 conditions to 2326; rows,
+decisions and discrepancies are unchanged. On `18-HCAA-00852_1821`, the document
+this entry was written from, the two readers go from **56 and 59** to 56 and 56,
+and the three items that separated them are exactly the three not-applicable
+answers at 3.2, 4.8 and 5.3.
 
 ## contract_b: whether a number that both states a requirement and introduces
 children earns its own entry
@@ -52,6 +65,14 @@ treating the parent as a heading. The contract's rule that "a number earns an en
 when dropping it would lose a requirement" settles this in principle, but readers
 do not apply it consistently, which is the signal that it is not stated plainly
 enough to survive contact with the forms.
+
+**Open.** The ruling that conditions are requirements decides this case too — a
+parent stating a requirement of its own is one, and a bare label is not — but
+unlike the not-applicable question there is no way to apply it to reads already
+taken. Whether a parent carried its own requirement is not recoverable from the
+entry a reader chose to write; only re-reading settles it. So the wording is left
+alone until the re-read, rather than changed now and quietly disagreeing with
+every read banked under it.
 
 ## contract_a: `source` asserts something nothing can check
 

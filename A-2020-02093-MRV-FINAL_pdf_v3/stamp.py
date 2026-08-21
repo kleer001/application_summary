@@ -22,6 +22,9 @@ PASS_CONTRACT = {"a": "contract_a.md", "b": "contract_b.md"}
 EQUIVALENT = {
     "65cf28db2fd3": "pass A, differs only in the reply a reader is asked for",
     "08ed9905cc09": "pass B, differs only in the reply a reader is asked for",
+    "b6885a580b3d": ("pass B, before the not-applicable rule was written down; "
+                     "combine.py drops those items from every read whatever the "
+                     "reader did, so the workbook is the same either way"),
 }
 
 

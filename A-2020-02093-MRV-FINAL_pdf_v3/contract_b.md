@@ -130,6 +130,15 @@ every numbered item you find.
   entry and its children are. Read the number's own text and ask whether dropping
   it would lose a requirement.
 
+  **A numbered item answering "not applicable" is not an entry.** A condition is
+  a requirement of the authorization, and `3.2 Other conditions related to
+  offsetting: Not applicable` imposes none — it records that the form's heading
+  had nothing under it. This covers the marker however it is written and in
+  either language: `N/A`, `NA`, `Not Applicable`, `S/O`, `Sans objet`,
+  `Ne s'applique pas`, with or without the accent or the full stop. A requirement
+  that merely mentions one of these words is an entry like any other; what
+  disqualifies an item is the whole of its answer being the marker.
+
   **A numbered section whose body is unnumbered prose is one entry, numbered for
   the section.** Where section 1 is a heading followed by a paragraph stating the
   period of the authorization and nothing is numbered beneath it, that paragraph
