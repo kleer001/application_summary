@@ -28,10 +28,10 @@ def covers(sa, sb):
     if not sa or not sb or len(sa) < len(sb):
         return False
     used = set()
-    for y in sb:
+    for y in sorted(sb):                               # greedy over a set is seed-dependent
         if len(y) < 8:
             return False                       # too short to be evidence of anything
-        hit = next((x for x in sa if x not in used and (y in x or x in y)), None)
+        hit = next((x for x in sorted(sa) if x not in used and (y in x or x in y)), None)
         if hit is None:
             return False
         used.add(hit)

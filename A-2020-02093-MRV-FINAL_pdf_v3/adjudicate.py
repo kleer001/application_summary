@@ -43,8 +43,20 @@ def _twins(x, y):
 
 
 def _pairs_up(sa, sb):
-    """Every entry on the smaller side has a near-twin on the larger side."""
+    """Every entry on the smaller side has a near-twin on the larger side.
+
+    Both sides are sorted before matching. They arrive as sets, and pairing them
+    off greedily means the first twin found wins the entry it matched — so with
+    set iteration order the verdict depended on the hash seed, and the same two
+    readers could be a conflict on one run and texture on the next. Measured
+    over the reads banked so far, one field in the queue moved between runs.
+
+    The matching stays greedy, which can fail to pair sides that a perfect
+    matching would. That direction is the safe one: it reports a conflict and a
+    person looks at it.
+    """
     small, large = (sa, sb) if len(sa) <= len(sb) else (sb, sa)
+    small, large = sorted(small), sorted(large)
     used = set()
     for y in small:
         hit = next((x for x in large if x not in used and _twins(x, y)), None)
