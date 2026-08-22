@@ -101,6 +101,27 @@ def tonight(cfg, wave):
     return picked, docs, left
 
 
+def batches(picked, limit):
+    """Tonight's reads split so no batch exceeds the concurrency limit.
+
+    Split between documents and never inside one. A document's reads belong
+    together: they are combined with each other and nothing else, and a reader
+    that fails is easier to place when the others ran beside it.
+    """
+    out, cur = [], []
+    for o in picked:
+        starts_doc = not cur or o["stem"] != cur[-1]["stem"]
+        if starts_doc and cur:
+            same = sum(1 for x in picked if x["stem"] == o["stem"])
+            if len(cur) + same > limit:
+                out.append(cur)
+                cur = []
+        cur.append(o)
+    if cur:
+        out.append(cur)
+    return out
+
+
 if __name__ == "__main__":
     cfg, wave = load()
     picked, docs, left = tonight(cfg, wave)
@@ -120,8 +141,11 @@ if __name__ == "__main__":
         if moved:
             print(f"# retired {len(moved)} superseded answer(s) to superseded/")
 
-    print(f"# {len(picked)} reads over {len(docs)} documents; "
+    groups = batches(picked, cfg["concurrent_reads"])
+    print(f"# {len(picked)} reads over {len(docs)} documents in {len(groups)} batch(es); "
           f"{len(left)} of {len(wave)} outstanding before tonight")
-    for o in picked:
-        print(f"{o['stem']}\t{o['pass']}{o['reader']}\t{o['model']}\t{o['language']}\t"
-              f"{o['contract']}\t{o['slice']}\t{o['pdf']}\t{o['out']}")
+    for n, group in enumerate(groups, 1):
+        print(f"# batch {n} of {len(groups)} — {len(group)} reads")
+        for o in group:
+            print(f"{o['stem']}\t{o['pass']}{o['reader']}\t{o['model']}\t{o['language']}\t"
+                  f"{o['contract']}\t{o['slice']}\t{o['pdf']}\t{o['out']}")

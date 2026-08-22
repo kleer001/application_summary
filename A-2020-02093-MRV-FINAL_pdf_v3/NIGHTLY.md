@@ -60,13 +60,20 @@ stem <TAB> pass+reader <TAB> model <TAB> language <TAB> contract <TAB> slice <TA
 Take that list as given. Do not re-derive it, filter it, or decide some of it looks
 unnecessary — a read appears there only because its output file does not exist.
 
-## 2. Spawn one reader per line
+## 2. Spawn one reader per line, a batch at a time
 
 For each line, spawn a `page-reader` subagent **on the model named in column 3** —
 that column is the language routing already decided, and overriding it costs
 accuracy on French documents.
 
-Launch them together so they run concurrently, and hand each one exactly this:
+The list is divided into batches by `# batch N of M` lines. **Launch every reader
+in a batch together, wait until all of them have replied, then start the next
+batch.** Concurrency is capped and the excess is rejected rather than queued, so
+a batch dispatched on top of a running one loses reads silently — they simply
+never write a file, and the only sign is a smaller count in step 5. Most nights
+are a single batch and this costs nothing.
+
+Hand each reader exactly this:
 
 ```
 Read one staged authorization document and record what it says.
@@ -87,6 +94,9 @@ Readers reply with the single word `done`. That is correct and deliberate. Do no
 ask them for more, do not summarise what they found, and do not read their output
 files to check — anything you take back from a reader stays in your context and is
 re-read on every turn you take afterwards.
+
+A batch is finished when every reader in it has replied. Do not start the next on
+a timer or because most are done.
 
 If a reader reports it could not write its output path, record that and continue.
 A missing file is simply outstanding again on the next run.
