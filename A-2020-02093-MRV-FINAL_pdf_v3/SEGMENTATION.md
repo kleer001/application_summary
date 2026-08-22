@@ -33,18 +33,22 @@ and `build.py` calls it wherever a row key is decided.
 
 ## A key that is not a file number
 
-Two segments are keyed on an authorization number rather than a file number,
-because OCR left nothing else on the page to key on:
+Two segments were keyed on an authorization number rather than a file number,
+because OCR left nothing else on the page to key on. Both are resolved, from the
+scan, in `corrections.json`:
 
-| keyed as | pages | what is in the text layer |
-|---|---|---|
-| `Auth 2019-039` | 189–198 | `N° du SAPH : 19-HQUE-O00255` — garbled, and rejected as malformed |
-| `Auth 2020-001` | 258–265 | no `SAPH` line at all; only `N° d'autorisation : 2020-001` |
+| keyed as | pages | the text layer | the scan |
+|---|---|---|---|
+| `Auth 2019-039` | 189–198 | `N° du SAPH : 19-HQUE-O00255` — a letter O for the first zero and one character too many, so it matched nothing | `19-HQUE-00255` |
+| `Auth 2020-001` | 258–265 | no `SAPH` line at all, only `N° d'autorisation : 2020-001` | `17-HQUE-00165` |
 
-`wave.check_keys` refuses to stage either, and says so by name. Neither has been
-read yet, so neither number is confirmed; recovering them means reading the scan
-and then adding a correction. Do not guess `19-HQUE-00255` from the garbled line —
-the digit count is wrong in the OCR and the scan is the only authority.
+`wave.check_keys` refuses to stage a segment whose key is not a file number, so
+this class fails at staging and by name rather than surfacing much later as a row
+nobody can match. Resolve a new one the same way: read page 1 of the scan, take
+the number from the header block, and record it with its evidence. The garbled
+text layer is not the authority even when it looks close — the first of these two
+differs from the scan by a character, and reading it as `19-HQUE-O0025` would
+have produced a plausible and wrong key.
 
 ## The trap: an amendment carries two file numbers
 
