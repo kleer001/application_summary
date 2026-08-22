@@ -43,9 +43,9 @@ The union kept a not-applicable item whenever either reader recorded one; the
 filter drops it whichever reader recorded it, so the count no longer depends on
 which reader was more literal and nothing has to be read again.
 
-Measured over the reads banked so far: 29 entries across 18 distinct wordings are
+Measured over the reads banked so far: 31 entries across 19 distinct wordings are
 the marker and nothing else, in both languages and with the accent and the full
-stop coming and going. The workbook goes from 2348 conditions to 2326; rows,
+stop coming and going. The workbook goes from 2348 conditions to 2325; rows,
 decisions and discrepancies are unchanged. On `18-HCAA-00852_1821`, the document
 this entry was written from, the two readers go from **56 and 59** to 56 and 56,
 and the three items that separated them are exactly the three not-applicable

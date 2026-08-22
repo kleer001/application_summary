@@ -5,11 +5,12 @@ the pages it came from, so any value can be checked against the page that carrie
 it. Nothing is copied from the prior summary; cells this run cannot support are
 left empty and the reason is on the Review_Queue.
 """
-import json, os, re, sys
+import functools, json, os, re, sys
 from collections import Counter, defaultdict
 
 from combine import combine_field, heading_disputes, union_conditions
-from ids import corrected
+from ids import corrected, file_no_of, stem_of
+from norm import norm
 from verify import check_conditions, check_field, load_pages, verdicts_for
 
 # The prior summary's 30 columns, in its order, each naming what fills it.
@@ -62,14 +63,16 @@ def cell(entries):
     # One value said twice is one value. A reader that quotes the same figure
     # from two places returns two entries, and joining them produced cells like
     # "17-HQUE-00044; 17-HQUE-00044" — which for the column that keys the row
-    # meant the row could not be found by its own file number.
+    # meant the row could not be found by its own file number. Sameness is
+    # folded, as it is everywhere else here: "65 m2" and "65 m²" are one value,
+    # and raw string equality would let the same cell back in.
     seen, out = set(), []
     for e in entries:
         v = str(e["value"])
-        if v not in seen:
-            seen.add(v)
+        if norm(v) not in seen:
+            seen.add(norm(v))
             out.append(v)
-    return out[0] if len(out) == 1 else "; ".join(out)
+    return "; ".join(out)
 
 
 def absolutise(doc, first):
@@ -106,18 +109,22 @@ def labels(sandbox):
     return out
 
 
-def adjudications(sandbox, doc_id):
-    """Pass C answers already on disk for this document, keyed by field."""
+@functools.lru_cache(maxsize=4)
+def _rulings(sandbox):
+    """Every ruling on disk, by stem. One listing, not one per document."""
     out = {}
     d = f"{sandbox}/adjudicated"
-    if not os.path.isdir(d):
-        return out
-    stem = doc_id.replace("#", "_")
-    for f in os.listdir(d):
-        if f.startswith(stem + ".") and f.endswith(".json"):
-            a = json.load(open(f"{d}/{f}"))
-            out[a["field"]] = a
+    if os.path.isdir(d):
+        for f in sorted(os.listdir(d)):
+            if f.endswith(".json"):
+                a = json.load(open(f"{d}/{f}"))
+                out.setdefault(f.split(".")[0], {})[a["field"]] = a
     return out
+
+
+def adjudications(sandbox, doc_id):
+    """Pass C answers already on disk for this document, keyed by field."""
+    return _rulings(sandbox).get(stem_of(doc_id), {})
 
 
 def read_document(order, queue):
@@ -218,23 +225,19 @@ def read_document(order, queue):
     # A number one reader recorded and the other read as a heading. The union
     # keeps it either way, so unless it is queued here nobody is ever asked.
     headings = set()
-    for num, tag, _ in heading_disputes(*kept):
-        name = f"heading {num}"
-        ruling = ruled.get(name)
+    for num, tag in heading_disputes(*kept):
+        ruling = ruled.get(f"heading {num}")
         verdict = (ruling or {}).get("winner")
-        if verdict in ("heading", "condition"):
-            if verdict == "heading":
-                headings.add(num)
-            queue.append({
-                "document": order["doc_id"], "field": name,
-                "why": f'pass C: {num} is a {verdict} — {(ruling.get("reason") or "")[:100]}',
-                "resolved": True})
-        else:
-            queue.append({
-                "document": order["doc_id"], "field": name,
-                "why": (f"reader {tag} recorded {num} as a condition; the other read it "
-                        f"as a heading introducing the numbers beneath it"),
-                "resolved": False})
+        settled = verdict in ("heading", "condition")
+        if verdict == "heading":
+            headings.add(num)
+        queue.append({
+            "document": order["doc_id"], "field": f"heading {num}",
+            "why": (f'pass C: {num} is a {verdict} — {(ruling.get("reason") or "")[:100]}'
+                    if settled else
+                    f"reader {tag} recorded {num} as a condition; the other read it "
+                    f"as a heading introducing the numbers beneath it"),
+            "resolved": settled})
 
     return {"doc_id": order["doc_id"],
             "file_number": corrected(order["stem"], order["file_number"]),
@@ -412,8 +415,7 @@ def assemble(sandbox):
         docs.append(read_document(o, queue))
     for q in queue:
         # The queue is read by file number, so it has to move with the row.
-        q["file_number"] = corrected(q["document"].replace("#", "_"),
-                                     q["document"].split("#")[0])
+        q["file_number"] = corrected(stem_of(q["document"]), file_no_of(q["document"]))
 
     by_fn = defaultdict(list)
     for d in docs:
@@ -582,17 +584,17 @@ def open_conflicts(sandbox):
     none of its dependencies, so a night that has just read can hand its
     conflicts to an adjudicator instead of waiting for the corpus to finish and
     a workbook to be assembled. Returns the assembled parts build() goes on to
-    write, and the conflicts nothing has settled.
+    write, followed by the conflicts nothing has settled.
     """
     rows, docs, queue, discrepancies = assemble(sandbox)
     queue = dedupe(queue)
     for q in queue:
         q["kind"] = NOTE if q["resolved"] else classify_queue(q)
-    return (rows, docs, queue, discrepancies), write_conflicts(sandbox, queue)
+    return rows, docs, queue, discrepancies, write_conflicts(sandbox, queue)
 
 
 def build(sandbox, out_path):
-    (rows, docs, queue, discrepancies), _ = open_conflicts(sandbox)
+    rows, docs, queue, discrepancies, _ = open_conflicts(sandbox)
     spec = list(json.load(open(f"{sandbox}/fields.json")))
     write_workbook(rows, docs, queue, discrepancies, spec, out_path, labels(sandbox))
     return {"rows": len(rows), "documents": len(docs),

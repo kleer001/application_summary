@@ -17,17 +17,29 @@ import os
 import re
 
 FILE_RX = re.compile(r"\d{2}-H[A-Z]{3}-\d{5}")
-# The whole of a key, not a match found inside prose. A row key that is an
-# authorization number ("Auth 2019-039") passes no test that looks for a file
-# number somewhere in a string, and fails this one.
-KEY_RX = re.compile(r"\A\d{2}-H[A-Z]{3}-\d{5}\Z")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CORRECTIONS = os.path.join(HERE, "corrections.json")
 
 
 def is_file_number(value):
-    return bool(KEY_RX.match(str(value or "")))
+    """The whole of the value is a file number, not a match found inside prose.
+
+    A row key that is an authorization number ("Auth 2019-039") contains no file
+    number and fails this; one that quotes a file number mid-sentence would pass
+    a search and must not pass here.
+    """
+    return bool(FILE_RX.fullmatch(str(value or "")))
+
+
+def stem_of(doc_id):
+    """`19-HQUE-00309#465` -> `19-HQUE-00309_465`, the name its files carry."""
+    return doc_id.replace("#", "_")
+
+
+def file_no_of(doc_id):
+    """The key part of a doc_id, before the page it starts on."""
+    return doc_id.split("#")[0]
 
 
 @functools.lru_cache(maxsize=1)

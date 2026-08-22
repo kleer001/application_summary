@@ -76,12 +76,32 @@ def stamp(sandbox):
     return done, already
 
 
+def stamp_of(path):
+    """The contract a reader file records, or UNSTAMPED if it records none.
+
+    Unparseable JSON is not answered here. A corrupt reader output is a real
+    fault and reporting it as unstamped would quietly turn it into a re-read and
+    file it in superseded/ as though it had merely been written under an older
+    contract.
+    """
+    return json.load(open(path)).get("contract", "UNSTAMPED")
+
+
+def live():
+    """Stamps whose answers still stand: in force, or equivalent to one.
+
+    Selecting reads, adjudicating them and reporting on them must agree about
+    which answers are stale, so the set is defined once here beside EQUIVALENT
+    rather than rebuilt by each caller.
+    """
+    return set(current().values()) | set(EQUIVALENT)
+
+
 def survey(sandbox):
     seen, od = {}, out_dir(sandbox)
     for name in sorted(os.listdir(od)):
         if name.endswith(".json"):
-            doc = json.load(open(f"{od}/{name}"))
-            seen.setdefault(doc.get("contract", "UNSTAMPED"), []).append(name)
+            seen.setdefault(stamp_of(f"{od}/{name}"), []).append(name)
     return seen
 
 
@@ -97,7 +117,7 @@ if __name__ == "__main__":
                     else "STALE, needs re-reading")
             print(f"  {h:12s} {len(files):4d} files   {mark}")
         if "--stale" in sys.argv:
-            ok = set(now.values()) | set(EQUIVALENT)
+            ok = live()
             stale = [f for h, fs in seen.items() if h not in ok for f in fs]
             print(f"\n{len(stale)} files not on a contract in force")
             for f in stale:

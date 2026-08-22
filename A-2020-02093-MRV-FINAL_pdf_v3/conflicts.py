@@ -23,7 +23,7 @@ NONE_OUTSTANDING = 3
 
 if __name__ == "__main__":
     sandbox = sys.argv[1]
-    (_, docs, queue, _), outstanding = open_conflicts(sandbox)
+    _, docs, queue, _, outstanding = open_conflicts(sandbox)
     settled = sum(1 for q in queue if q["resolved"])
     print(f"{len(outstanding)} conflicts outstanding over {len(docs)} complete "
           f"documents; {settled} already settled -> {sandbox}/conflicts.json")

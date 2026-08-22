@@ -28,10 +28,11 @@ The counts of both are printed.
 
 Exit status is 0 while adjudications remain and 3 when none do.
 """
-import json, os, re, sys
+import functools, json, os, re, sys
 
-from combine import norm_number
-from stamp import EQUIVALENT, current, survey
+from combine import number_key
+from ids import stem_of
+from stamp import live, survey
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(HERE, "nightly.json")
@@ -52,13 +53,24 @@ def on_a_live_contract(sandbox):
     sitting there keyed to the field. So a document is not adjudicated until the
     reads underneath it are ones the corpus intends to keep.
     """
-    ok = set(current().values()) | set(EQUIVALENT)
+    ok = live()
     return {f for h, files in survey(sandbox).items() if h in ok for f in files}
 
 
 def orders_by_stem(sandbox):
     wave = json.load(open(f"{sandbox}/wave.json"))
     return {o["stem"]: o for o in wave}
+
+
+@functools.lru_cache(maxsize=64)
+def read_out(out_dir, stem, tag):
+    """One reader's output, or an empty document where it wrote none.
+
+    Cached: a document with sixteen heading disputes would otherwise parse the
+    same two condition files sixteen times over.
+    """
+    path = os.path.join(out_dir, f"{stem}.{tag}.json")
+    return json.load(open(path)) if os.path.exists(path) else {}
 
 
 def entries_as_written(out_dir, stem, tag, field):
@@ -68,21 +80,11 @@ def entries_as_written(out_dir, stem, tag, field):
     place them in the workbook. The adjudicator is given the excerpt and the PDF
     of it, both numbered from 1, and must be given citations that match.
     """
-    path = os.path.join(out_dir, f"{stem}.{tag}.json")
-    if not os.path.exists(path):
-        return []
-    doc = json.load(open(path))
-    return (doc.get("fields", {}).get(field) or {}).get("entries") or []
+    fields = read_out(out_dir, stem, tag).get("fields") or {}
+    return (fields.get(field) or {}).get("entries") or []
 
 
-def conditions_of(out_dir, stem, tag):
-    path = os.path.join(out_dir, f"{stem}.{tag}.json")
-    if not os.path.exists(path):
-        return []
-    return json.load(open(path)).get("conditions") or []
-
-
-def heading_brief(out_dir, stem, number, order):
+def heading_brief(out_dir, stem, number):
     """The disputed line and the numbers beneath it, from whichever reader kept them.
 
     A reader that read the line as a heading did not write it down, so its text
@@ -92,73 +94,86 @@ def heading_brief(out_dir, stem, number, order):
     """
     line, children = None, {}
     for tag in ("b1", "b2"):
-        for c in conditions_of(out_dir, stem, tag):
-            num = norm_number(c.get("number"))
+        for c in read_out(out_dir, stem, tag).get("conditions") or []:
+            num = ".".join(str(x) for x in number_key(c.get("number")))
             entry = {"number": c.get("number"), "page": c.get("page"), "text": c.get("text")}
             if num == number and line is None:
                 line = entry
             elif num.startswith(number + "."):
                 children.setdefault(num, entry)
-    return line, [children[k] for k in sorted(children, key=lambda n: [int(x) for x in n.split(".")])]
+    return line, [children[k] for k in sorted(children, key=number_key)]
 
 
-def briefs(sandbox):
-    """Every unsettled field conflict, as (work order line, brief written)."""
+def outstanding(sandbox):
+    """Every unsettled conflict an adjudicator could take, in work-order order.
+
+    Selection reads the queue, the rulings already on disk and the contract
+    stamps, and never opens a reader file. Briefing costs several file loads, so
+    only what the night will actually dispatch is briefed — the backlog is
+    counted, not written out.
+    """
     conflicts = json.load(open(f"{sandbox}/conflicts.json"))
     orders = orders_by_stem(sandbox)
-    brief_dir, ruling_dir = f"{sandbox}/passc", f"{sandbox}/adjudicated"
-    os.makedirs(brief_dir, exist_ok=True)
+    ruling_dir = f"{sandbox}/adjudicated"
+    ruled = set(os.listdir(ruling_dir)) if os.path.isdir(ruling_dir) else set()
 
-    live = on_a_live_contract(sandbox)
-    lines, other, stale = [], 0, 0
+    on_contract = on_a_live_contract(sandbox)
+    picked, other, stale = [], 0, 0
     for c in conflicts:
         heading = c["field"].startswith("heading ")
         if not heading and not c["why"].startswith("different answers"):
             other += 1
             continue
-        stem = c["document"].replace("#", "_")
+        stem = stem_of(c["document"])
         reads = ("b1", "b2") if heading else ("a1", "a2")
-        if not all(f"{stem}.{t}.json" in live for t in reads):
+        if not all(f"{stem}.{t}.json" in on_contract for t in reads):
             stale += 1
             continue
         order = orders.get(stem)
         if order is None:
             raise KeyError(f"{stem} is in conflicts.json but not in the work order")
         name = f"{stem}.{slug(c['field'])}.json"
-        out = os.path.join(ruling_dir, name)
-        if os.path.exists(out):
+        if name in ruled:
             continue                                  # already ruled on
-        out_dir = os.path.dirname(order["out"])
-        brief = {
-            "document_id": c["document"],
-            "field": c["field"],
-            "pages": [1, order["last_page"] - order["first_page"] + 1],
-            "disagreement": c["why"],
-        }
-        if heading:
-            number = c["field"].split(" ", 1)[1]
-            line, children = heading_brief(out_dir, stem, number, order)
-            brief.update(question="Is this number a condition, or a heading for the "
-                                  "numbers beneath it?",
-                         number=number, line=line, children=children)
-        else:
-            brief.update(reader_1=entries_as_written(out_dir, stem, "a1", c["field"]),
-                         reader_2=entries_as_written(out_dir, stem, "a2", c["field"]))
-        brief_path = os.path.join(brief_dir, name)
-        json.dump(brief, open(brief_path, "w"), indent=1, ensure_ascii=False)
-        lines.append((stem, c["field"], MODEL, brief_path,
-                      order["fields"], order["slice"], order["pdf"], out))
-    return lines, other, stale
+        picked.append((c, stem, order, name, heading))
+    return picked, other, stale
+
+
+def write_brief(sandbox, c, stem, order, name, heading):
+    """The brief for one adjudication, and its line of the work order."""
+    brief_dir = f"{sandbox}/passc"
+    os.makedirs(brief_dir, exist_ok=True)
+    out_dir = os.path.dirname(order["out"])
+    brief = {
+        "document_id": c["document"],
+        "field": c["field"],
+        "pages": [1, order["last_page"] - order["first_page"] + 1],
+        "disagreement": c["why"],
+    }
+    if heading:
+        number = c["field"].split(" ", 1)[1]
+        line, children = heading_brief(out_dir, stem, number)
+        brief.update(question="Is this number a condition, or a heading for the "
+                              "numbers beneath it?",
+                     number=number, line=line, children=children)
+    else:
+        brief.update(reader_1=entries_as_written(out_dir, stem, "a1", c["field"]),
+                     reader_2=entries_as_written(out_dir, stem, "a2", c["field"]))
+    brief_path = os.path.join(brief_dir, name)
+    json.dump(brief, open(brief_path, "w"), indent=1, ensure_ascii=False)
+    return (stem, c["field"], MODEL, brief_path,
+            order["fields"], order["slice"], order["pdf"],
+            os.path.join(sandbox, "adjudicated", name))
 
 
 if __name__ == "__main__":
     sandbox = sys.argv[1]
-    lines, other, stale = briefs(sandbox)
+    picked, other, stale = outstanding(sandbox)
     cap = json.load(open(CONFIG))["adjudications_per_night"]
-    print(f"# {len(lines)} adjudications outstanding; {stale} waiting on a re-read; "
+    print(f"# {len(picked)} adjudications outstanding; {stale} waiting on a re-read; "
           f"{other} queue entries are a different job and are not listed")
-    for line in lines[:cap]:
-        print("\t".join(line))
+    for args in picked[:cap]:
+        print("\t".join(write_brief(sandbox, *args)))
     # On the full count, not the capped one: a cap of zero is a night that
     # adjudicates nothing, not a corpus with nothing left to adjudicate.
-    sys.exit(NONE_OUTSTANDING if not lines else 0)
+    sys.exit(NONE_OUTSTANDING if not picked else 0)

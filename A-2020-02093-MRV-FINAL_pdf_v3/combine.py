@@ -27,11 +27,11 @@ def covers(sa, sb):
     """
     if not sa or not sb or len(sa) < len(sb):
         return False
-    used = set()
-    for y in sorted(sb):                               # greedy over a set is seed-dependent
+    used, ordered = set(), sorted(sa)      # greedy over a set is seed-dependent
+    for y in sorted(sb):
         if len(y) < 8:
             return False                       # too short to be evidence of anything
-        hit = next((x for x in sorted(sa) if x not in used and (y in x or x in y)), None)
+        hit = next((x for x in ordered if x not in used and (y in x or x in y)), None)
         if hit is None:
             return False
         used.add(hit)
@@ -74,24 +74,30 @@ def combine_field(fa, fb, verdict_a, verdict_b):
 # A numbered item answering "not applicable" states no requirement, and a
 # condition is a requirement of the authorization. Observed as a label followed
 # by the marker, in both languages and with the accent and the full stop coming
-# and going: 29 such entries over 18 distinct wordings in the reads banked so
+# and going: 31 such entries over 19 distinct wordings in the reads banked so
 # far. The payload is what follows the label, so a requirement that merely
 # mentions one of these words is untouched.
-NOT_APPLICABLE = {"na", "n/a", "notapplicable", "notapplicablena", "so", "s/o",
+# Folded with norm, the same rule every other comparison here uses. A second
+# folding rule would diverge from it on exactly the OCR damage norm exists to
+# absorb, and nothing would report that it had.
+NOT_APPLICABLE = {"na", "notapplicable", "notapplicablena", "so",
                   "nesappliquepas", "sansobjet", "aucun", "aucune", "nil", "none"}
 
 
 def states_a_requirement(text):
     """False for a numbered item whose whole answer is "not applicable"."""
     t = (text or "").strip()
-    payload = t.rsplit(":", 1)[1] if ":" in t else t
-    folded = re.sub(r"[^a-z0-9/]", "", payload.lower().replace("\u2019", "").replace("'", ""))
-    return folded not in NOT_APPLICABLE
+    return fold(t.rsplit(":", 1)[1] if ":" in t else t) not in NOT_APPLICABLE
 
 
 def norm_number(n):
     """4.2, 42 and 4,2 are one condition number."""
     return ".".join(re.findall(r"\d+", str(n or "")))
+
+
+def number_key(n):
+    """Sort key putting 4.2 before 4.10, which a string sort does not."""
+    return [int(x) for x in norm_number(n).split(".") if x]
 
 
 def heading_disputes(ca, cb):
@@ -103,21 +109,23 @@ def heading_disputes(ca, cb):
     other as introducing the items below. The union silently keeps it, so
     without this the disagreement never reaches anybody.
 
-    Returns (number, reader who recorded it, that reader's entry).
+    Returns (number, the reader who recorded it). The line's own text is not
+    returned: the caller that briefs an adjudicator reads it from the reader
+    file, where the children are too.
     """
     sides = {}
     for tag, side in (("1", ca), ("2", cb)):
-        sides[tag] = {norm_number(c.get("number")): c for c in (side or [])
+        sides[tag] = {norm_number(c.get("number")) for c in (side or [])
                       if states_a_requirement(c.get("text")) and norm_number(c.get("number"))}
-    every = set(sides["1"]) | set(sides["2"])
+    every = sides["1"] | sides["2"]
     out = []
     for tag, other in (("1", "2"), ("2", "1")):
-        for num, c in sides[tag].items():
+        for num in sides[tag]:
             if num in sides[other]:
                 continue
-            if any(o != num and o.startswith(num + ".") for o in every):
-                out.append((num, tag, c))
-    return sorted(out, key=lambda r: [int(x) for x in r[0].split(".")])
+            if any(o.startswith(num + ".") for o in every):
+                out.append((num, tag))
+    return sorted(out, key=lambda r: number_key(r[0]))
 
 
 def union_conditions(ca, cb, headings=None):
@@ -150,4 +158,4 @@ def union_conditions(ca, cb, headings=None):
         if children and folded[key] and folded[key][:40] in covered:
             continue                                       # a parent its children carry
         kept.append(c)
-    return sorted(kept, key=lambda c: [int(x) for x in norm_number(c["number"]).split(".")])
+    return sorted(kept, key=lambda c: number_key(c["number"]))

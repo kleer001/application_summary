@@ -21,6 +21,7 @@ import openpyxl
 from adjudicate import adjudicate
 from build import INFERRED, PRIOR, VOCABULARIES
 from norm import on_page
+from ids import corrected
 from verify import check_conditions, load_pages, verdicts_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,16 +50,16 @@ def control(sandbox, xlsx):
                                               o["first_page"], o["last_page"]).items():
                 checked[f"field:{verdict}"] += 1
                 if verdict in ("REJECT", "MALFORMED"):
-                    rejected.setdefault((o["file_number"], name), []).append(
+                    rejected.setdefault((corrected(o["stem"], o["file_number"]), name), []).append(
                         f"{stem} {tag}")
                 elif verdict in ("pass", "QUEUE"):
-                    verified.add((o["file_number"], name))
+                    verified.add((corrected(o["stem"], o["file_number"]), name))
         for tag in ("b1", "b2"):
             doc = json.load(open(f"{sandbox}/out/{stem}.{tag}.json"))
             for num, verdict, _ in check_conditions(doc, o["slice"]):
                 checked[f"condition:{verdict}"] += 1
                 if verdict == "REJECT":
-                    rejected_conditions.add((o["file_number"], str(num)))
+                    rejected_conditions.add((corrected(o["stem"], o["file_number"]), str(num)))
 
     # 2. no cell in the summary carries an unadjudicated conflict
     conflicts = set()
@@ -71,7 +72,7 @@ def control(sandbox, xlsx):
             if ea or eb:
                 entries, verdict, _ = adjudicate(ea, eb)
                 if verdict == "conflict":
-                    conflicts.add((o["file_number"], k))
+                    conflicts.add((corrected(o["stem"], o["file_number"]), k))
                     if entries:
                         findings.append(("a conflict resolved itself into a cell",
                                          f"{stem} {k}"))

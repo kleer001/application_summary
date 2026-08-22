@@ -14,8 +14,10 @@ Exit status is 0 while work remains and 3 when the corpus is finished, so a
 scheduled run can stop without a person deciding it is done.
 """
 import json, os, shutil, sys
+from itertools import groupby
+from operator import itemgetter
 
-from stamp import EQUIVALENT, current
+from stamp import live, stamp_of
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -32,13 +34,6 @@ def load():
     return cfg, wave
 
 
-def stamp_of(path):
-    try:
-        return json.load(open(path)).get("contract", "UNSTAMPED")
-    except (OSError, json.JSONDecodeError):
-        return "UNSTAMPED"
-
-
 def outstanding(wave):
     """Reads with no answer, and reads whose answer is no longer current.
 
@@ -48,23 +43,24 @@ def outstanding(wave):
     decision nothing acts on: the files are all present, so nothing is ever
     selected, and the corpus keeps its old answers for good.
     """
-    live = set(current().values()) | set(EQUIVALENT)
+    ok = live()
     return [o for o in wave
-            if not os.path.exists(o["_out_abs"]) or stamp_of(o["_out_abs"]) not in live]
+            if not os.path.exists(o["_out_abs"]) or stamp_of(o["_out_abs"]) not in ok]
 
 
-def retire(picked, sandbox_root):
+def retire(picked):
     """Move a superseded answer aside so the re-read has somewhere to land.
 
     Kept rather than overwritten: it was a real reading of the page, and which
-    contract a figure came from is part of its provenance.
+    contract a figure came from is part of its provenance. The destination comes
+    from each file's own path, so nothing has to reconstruct where the sandbox is.
     """
     moved = []
     for o in picked:
         path = o["_out_abs"]
         if not os.path.exists(path):
             continue
-        dest = os.path.join(sandbox_root, "superseded")
+        dest = os.path.join(os.path.dirname(os.path.dirname(path)), "superseded")
         os.makedirs(dest, exist_ok=True)
         # Named by the contract that produced it. A document read three times
         # under three contracts supersedes twice, and moving each to its plain
@@ -72,11 +68,11 @@ def retire(picked, sandbox_root):
         # is for. The stamp also says, from the filename alone, which version of
         # the specification an old answer was given under.
         stem, _, ext = os.path.basename(path).rpartition(".")
-        name = f"{stem}.{stamp_of(path)}.{ext}"
-        target = os.path.join(dest, name)
+        tag = stamp_of(path)
+        target = os.path.join(dest, f"{stem}.{tag}.{ext}")
         n = 2
         while os.path.exists(target):
-            target = os.path.join(dest, f"{stem}.{stamp_of(path)}.{n}.{ext}")
+            target = os.path.join(dest, f"{stem}.{tag}.{n}.{ext}")
             n += 1
         shutil.move(path, target)
         moved.append(os.path.basename(target))
@@ -109,14 +105,12 @@ def batches(picked, limit):
     that fails is easier to place when the others ran beside it.
     """
     out, cur = [], []
-    for o in picked:
-        starts_doc = not cur or o["stem"] != cur[-1]["stem"]
-        if starts_doc and cur:
-            same = sum(1 for x in picked if x["stem"] == o["stem"])
-            if len(cur) + same > limit:
-                out.append(cur)
-                cur = []
-        cur.append(o)
+    for _, group in groupby(picked, key=itemgetter("stem")):
+        group = list(group)
+        if cur and len(cur) + len(group) > limit:
+            out.append(cur)
+            cur = []
+        cur.extend(group)
     if cur:
         out.append(cur)
     return out
@@ -137,7 +131,7 @@ if __name__ == "__main__":
         sys.exit(FINISHED)
 
     if "--retire" in sys.argv:
-        moved = retire(picked, os.path.dirname(picked[0]["_out_abs"]).rsplit(os.sep, 1)[0])
+        moved = retire(picked)
         if moved:
             print(f"# retired {len(moved)} superseded answer(s) to superseded/")
 
