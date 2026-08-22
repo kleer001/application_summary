@@ -1,8 +1,17 @@
 """Check a reader's output against the slice it was given.
 
-A value survives only if its quote occurs on the page it cites. Numeric values
-must additionally have their digits present in their own quote, which is the
-guard against a vision model smoothing a figure toward a rounder one.
+A value survives only if its quote occurs on the page it cites. A value the
+reader wrote as a JSON number must additionally have its digits present in its
+own quote, which is the guard against a vision model smoothing a figure toward a
+rounder one.
+
+The guard covers numbers, not everything numeric-looking. A figure recorded with
+its unit or currency — `"660 m²"`, `"$69,700.00"` — is a string and is checked
+only by its quote, and a third of the entries in the area and amount fields are
+written that way. That is deliberate: the contract asks for the document's own
+words, and a reader that keeps the unit is following it. The quote check still
+has to pass, so such a value cannot be invented; what it can be is rounded
+without the digits being compared.
 """
 import functools, json, re, sys
 from collections import Counter
@@ -29,7 +38,11 @@ def load_pages(slice_path):
 
 
 def digits_present(value, quote):
-    """Every digit-run of the value must appear in the quote, separators aside."""
+    """Every digit-run of the value must appear in the quote, separators aside.
+
+    Applied only where the reader wrote a JSON number; see the module docstring
+    for why a value carrying its unit is checked by its quote alone.
+    """
     want = re.sub(r"[^\d]", "", str(value).split(".")[0])
     return want in re.sub(r"[^\d]", "", quote) if want else True
 
