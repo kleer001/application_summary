@@ -11,7 +11,8 @@ from collections import Counter, defaultdict
 from combine import combine_field, heading_disputes, union_conditions
 from ids import corrected, file_no_of, stem_of
 from norm import norm
-from verify import check_conditions, check_field, load_pages, verdicts_for
+from paths import complete_stems
+from verify import VERIFIED, check_conditions, check_field, load_pages, verdicts_for
 
 # The prior summary's 30 columns, in its order, each naming what fills it.
 # A field name reads that field; "@" runs the derivation of that name below;
@@ -141,7 +142,8 @@ def read_document(order, queue):
         if os.path.exists(path):
             return json.load(open(path))
         queue.append({"document": order["doc_id"], "field": "*",
-                      "why": f"reader {tag} wrote no file", "resolved": False})
+                      "why": f"reader {tag} wrote no file", "resolved": False,
+                      "reason": "no_file"})
         return {"fields": {}, "conditions": []}
 
     fields_docs = {t: load(f"a{t}") for t in ("1", "2")}
@@ -160,7 +162,8 @@ def read_document(order, queue):
     fields = {}
     names = set(fields_docs["1"].get("fields", {})) | set(fields_docs["2"].get("fields", {}))
     for name in sorted(names):
-        entries, note, resolved = combine_field(fields_docs["1"].get("fields", {}).get(name),
+        entries, note, resolved, reason = combine_field(
+                                                fields_docs["1"].get("fields", {}).get(name),
                                                 fields_docs["2"].get("fields", {}).get(name),
                                                 checked["1"].get(name, "missing"),
                                                 checked["2"].get(name, "missing"))
@@ -173,30 +176,33 @@ def read_document(order, queue):
                 verdict = check_field(name, {"entries": a["entries"]},
                                       load_pages(order["slice"]),
                                       order["last_page"] - order["first_page"] + 1)[1]
-                if verdict in ("pass", "QUEUE"):
+                if verdict in VERIFIED:
                     # Pass C cites pages from 1, as a reader does; these arrive
                     # after the reader output was absolutised, so they need it too.
                     entries = [dict(e, page=abs_page(e.get("page"), order["first_page"]))
                                for e in a["entries"]]
                     resolved = True
+                    reason = "passc_settled"
                     note = f'pass C ({a["winner"]}): {a.get("reason", "")[:110]}'
                     if verdict == "QUEUE":
                         note += " [read from the scan, not the text layer]"
                 else:
+                    reason = "passc_failed_check"
                     note = (f'pass C answer failed its own check ({verdict}); '
                             f'the conflict stands')
             else:
+                reason = "passc_unsettled"
                 note = f'pass C could not settle it: {a.get("reason", "")[:120]}'
         if note:
             queue.append({"document": order["doc_id"], "field": name, "why": note,
-                          "resolved": resolved})
+                          "resolved": resolved, "reason": reason})
         fields[name] = entries
 
     kept = []
     for t, d in cond_docs.items():
         verdicts = cond_verdicts[t]
         kept.append([c for c in d.get("conditions", []) or []
-                     if verdicts.get(c.get("number")) in ("pass", "QUEUE")
+                     if verdicts.get(c.get("number")) in VERIFIED
                      or f"condition {c.get('number')}" in ruled])
         for c in d.get("conditions", []) or []:
             v = verdicts.get(c.get("number"))
@@ -214,13 +220,14 @@ def read_document(order, queue):
                 queue.append({
                     "document": order["doc_id"], "field": name,
                     "why": f'pass C located it: {ruling.get("reason", "")[:110]}',
-                    "resolved": True})
+                    "resolved": True, "reason": "condition_located"})
                 continue
             queue.append({
                 "document": order["doc_id"], "field": name,
                 "why": ("may be cut off at a page break - check it is whole"
                         if v == "QUEUE" else "text does not appear on the page it cites"),
-                "resolved": False})
+                "resolved": False,
+                "reason": "condition_page_break" if v == "QUEUE" else "condition_off_page"})
 
     # A number one reader recorded and the other read as a heading. The union
     # keeps it either way, so unless it is queued here nobody is ever asked.
@@ -232,12 +239,13 @@ def read_document(order, queue):
         if verdict == "heading":
             headings.add(num)
         queue.append({
-            "document": order["doc_id"], "field": f"heading {num}",
+            "document": order["doc_id"], "field": f"heading {num}", "number": num,
             "why": (f'pass C: {num} is a {verdict} — {(ruling.get("reason") or "")[:100]}'
                     if settled else
                     f"reader {tag} recorded {num} as a condition; the other read it "
                     f"as a heading introducing the numbers beneath it"),
-            "resolved": settled})
+            "resolved": settled,
+            "reason": "heading_settled" if settled else "heading_dispute"})
 
     return {"doc_id": order["doc_id"],
             "file_number": corrected(order["stem"], order["file_number"]),
@@ -403,8 +411,8 @@ def assemble(sandbox):
     """Every document whose four reads are present. A wave is built from what it
     finished, not from what it was asked to do, so a partial wave still builds."""
     orders = json.load(open(f"{sandbox}/wave.json"))
-    have = Counter(f.split(".")[0] for f in os.listdir(f"{sandbox}/out"))
-    orders = [o for o in orders if have.get(o["stem"], 0) == 4]
+    complete = complete_stems(sandbox)
+    orders = [o for o in orders if o["stem"] in complete]
     queue, discrepancies = [], []
     seen = set()
     docs = []
@@ -487,10 +495,10 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
     # a choice already made, kept so that taking one reader over another is never
     # silent. Filed together, the second buries the first.
     qs = wb.create_sheet("Review_Queue")
-    qs.append(["File_Number", "Document", "Field", "Why"])
-    for q in sorted((q for q in queue if q.get("kind") == DECISION),
+    qs.append(["File_Number", "Document", "Field", "Why", "Reason"])
+    for q in sorted((q for q in queue if q["kind"] == DECISION),
                     key=lambda q: q["file_number"]):
-        qs.append([q["file_number"], q["document"], q["field"], q["why"]])
+        qs.append([q["file_number"], q["document"], q["field"], q["why"], q["reason"]])
 
     ps = wb.create_sheet("Provenance")
     ps.append(["File_Number", "Document", "Field", "Why", "Settled_By"])
@@ -558,16 +566,14 @@ def dedupe(queue):
     return out
 
 
-def classify_queue(entry):
-    """Does this need somebody to decide, or is it worth knowing?
+# Reasons that are worth knowing but ask nothing of anybody. A queue that files
+# advisories as work gets ignored, and then the work in it gets ignored too.
+ADVISORY = ("condition_page_break", "both_null")
 
-    A queue that files advisories as work gets ignored, and then the work in it
-    gets ignored too.
-    """
-    why = entry["why"]
-    if "page break" in why or "both null, different reasons" in why:
-        return NOTE
-    return DECISION
+
+def classify_queue(entry):
+    """Does this need somebody to decide, or is it worth knowing?"""
+    return NOTE if entry["reason"] in ADVISORY else DECISION
 
 
 def write_conflicts(sandbox, queue):

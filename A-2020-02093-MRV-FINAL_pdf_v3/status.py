@@ -8,6 +8,7 @@ running again.
 import json, os, sys
 from collections import Counter
 
+from paths import resolve
 from verify import check
 
 
@@ -17,14 +18,16 @@ def status(sandbox):
     for o in orders:
         row = {"doc_id": o["doc_id"], "reader": o["reader"], "model": o["model"],
                "state": "outstanding", "detail": ""}
-        if os.path.exists(o["out"]):
+        answer = resolve(o["out"])
+        if os.path.exists(answer):
             try:
-                doc = json.load(open(o["out"]))
+                doc = json.load(open(answer))
             except json.JSONDecodeError as e:
                 row.update(state="failed", detail=f"invalid JSON: {e}")
             else:
                 v = Counter(verdict for _, verdict, _ in
-                            check(doc, o["slice"], o["first_page"], o["last_page"]))
+                            check(doc, resolve(o["slice"]),
+                                  o["first_page"], o["last_page"]))
                 fields = len(doc.get("fields", {}))
                 row["detail"] = (f"{v['pass']} pass, {v['null']} null, {v['QUEUE']} queued, "
                                  f"{v['REJECT'] + v['MALFORMED']} rejected, "

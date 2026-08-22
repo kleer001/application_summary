@@ -108,7 +108,7 @@ happens once, after every reader has finished and `stamp.py` has run.
 ## 3. Stamp what landed
 
 ```
-python3 A-2020-02093-MRV-FINAL_pdf_v3/stamp.py A-2020-02093-MRV-FINAL_pdf_v3
+python3 A-2020-02093-MRV-FINAL_pdf_v3/stamp.py A-2020-02093-MRV-FINAL_pdf_v3/run2
 ```
 
 This records on each new file which contract version produced it. Without it, a

@@ -22,21 +22,19 @@ from adjudicate import adjudicate
 from build import INFERRED, PRIOR, VOCABULARIES
 from norm import on_page
 from ids import corrected
-from verify import check_conditions, load_pages, verdicts_for
+from paths import complete_stems
+from stamp import current as contracts_in_force, pass_of, sha, stamp_of
+from verify import FAILED, VERIFIED, check_conditions, load_pages, verdicts_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-
-
-def sha(path):
-    return hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
 
 
 def control(sandbox, xlsx):
     """Every filled cell, back to a verified entry or to a stated derivation."""
     wb = openpyxl.load_workbook(xlsx, data_only=True)
     orders = json.load(open(f"{sandbox}/wave.json"))
-    have = Counter(f.split(".")[0] for f in os.listdir(f"{sandbox}/out"))
-    orders = [o for o in orders if have.get(o["stem"], 0) == 4]
+    complete = complete_stems(sandbox)
+    orders = [o for o in orders if o["stem"] in complete]
     by_stem = {o["stem"]: o for o in orders}
 
     findings, checked = [], Counter()
@@ -49,10 +47,10 @@ def control(sandbox, xlsx):
             for name, verdict in verdicts_for(doc, o["slice"],
                                               o["first_page"], o["last_page"]).items():
                 checked[f"field:{verdict}"] += 1
-                if verdict in ("REJECT", "MALFORMED"):
+                if verdict in FAILED:
                     rejected.setdefault((corrected(o["stem"], o["file_number"]), name), []).append(
                         f"{stem} {tag}")
-                elif verdict in ("pass", "QUEUE"):
+                elif verdict in VERIFIED:
                     verified.add((corrected(o["stem"], o["file_number"]), name))
         for tag in ("b1", "b2"):
             doc = json.load(open(f"{sandbox}/out/{stem}.{tag}.json"))
@@ -154,8 +152,7 @@ def control(sandbox, xlsx):
 def assurance(sandbox, xlsx, conflicts):
     """What the run did, stated so it can be disputed."""
     orders = json.load(open(f"{sandbox}/wave.json"))
-    have = Counter(f.split(".")[0] for f in os.listdir(f"{sandbox}/out"))
-    complete = {s for s, n in have.items() if n == 4}
+    complete = complete_stems(sandbox)
     models = defaultdict(set)
     for o in orders:
         if o["stem"] in complete:
@@ -190,13 +187,26 @@ def contracts_used(sandbox, pass_name):
     """
     seen = Counter()
     for name in sorted(os.listdir(f"{sandbox}/out")):
-        if name.endswith(".json") and name.rsplit(".", 2)[1][0] == pass_name:
-            seen[json.load(open(f"{sandbox}/out/{name}")).get("contract", "unstamped")] += 1
+        if name.endswith(".json") and pass_of(name) == pass_name:
+            seen[stamp_of(f"{sandbox}/out/{name}")] += 1
     if not seen:
         return "-"
-    now = sha(f"{HERE}/contract_{pass_name}.md")
+    now = contracts_in_force()[pass_name]
     return ", ".join(f"{h} ({n}{'' if h == now else ', not the version now on disk'})"
                      for h, n in seen.most_common())
+
+
+# What each reason costs a person. Keyed on the code the build stamps on the
+# entry, not on the sentence beside it — the sentence is free to be reworded.
+WORKLOAD = {
+    "conflict": "a field conflict pass C has not settled",
+    "heading_dispute": "a number one reader read as a heading",
+    "neither_verified": "a field neither reader verified",
+    "condition_off_page": "a condition whose text is not on its cited page",
+    "passc_unsettled": "pass C could not settle it",
+    "passc_failed_check": "a pass C answer that failed its own check",
+    "no_file": "a reader that wrote no file",
+}
 
 
 def workload(xlsx):
@@ -211,13 +221,7 @@ def workload(xlsx):
     notes = list(wb["Provenance"].iter_rows(min_row=2, values_only=True))
     kinds = Counter()
     for r in decisions:
-        why = str(r[3])
-        kinds["a number one reader read as a heading" if "as a heading introducing" in why
-              else "a condition whose text is not on its cited page" if "does not appear" in why
-              else "a field conflict pass C has not settled" if "conflict" in why or "different answers" in why
-              else "a field neither reader verified" if "neither reader" in why
-              else "pass C could not settle it" if "could not settle" in why
-              else "other"] += 1
+        kinds[WORKLOAD.get(r[4], "other")] += 1
     return len(decisions), len(notes), kinds
 
 

@@ -11,6 +11,13 @@ from norm import norm, on_page, tokens
 
 NULL_REASONS = ("not_stated", "blank_on_form", "redacted", "illegible")
 
+# The verdicts this module mints, named so consumers stop re-spelling them.
+# VERIFIED is "the quote was found where it said it would be" — QUEUE is a pass
+# with a caveat about a page break, not a failure. FAILED is the pair that means
+# the answer cannot be shown on its page and must not reach a cell.
+VERIFIED = ("pass", "QUEUE")
+FAILED = ("REJECT", "MALFORMED")
+
 
 @functools.lru_cache(maxsize=8)
 def load_pages(slice_path):

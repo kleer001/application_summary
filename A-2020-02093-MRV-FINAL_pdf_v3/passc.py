@@ -37,6 +37,10 @@ from stamp import live, survey
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(HERE, "nightly.json")
 MODEL = "opus"                 # measured: a Sonnet adjudicator under-collects
+
+# The two questions contract_c.md describes. A conflict reaches an adjudicator
+# because its reason says so, never because of how its `why` sentence is worded.
+ADJUDICABLE = ("conflict", "heading_dispute")
 NONE_OUTSTANDING = 3
 
 
@@ -120,10 +124,10 @@ def outstanding(sandbox):
     on_contract = on_a_live_contract(sandbox)
     picked, other, stale = [], 0, 0
     for c in conflicts:
-        heading = c["field"].startswith("heading ")
-        if not heading and not c["why"].startswith("different answers"):
+        if c["reason"] not in ADJUDICABLE:
             other += 1
             continue
+        heading = c["reason"] == "heading_dispute"
         stem = stem_of(c["document"])
         reads = ("b1", "b2") if heading else ("a1", "a2")
         if not all(f"{stem}.{t}.json" in on_contract for t in reads):
@@ -151,7 +155,7 @@ def write_brief(sandbox, c, stem, order, name, heading):
         "disagreement": c["why"],
     }
     if heading:
-        number = c["field"].split(" ", 1)[1]
+        number = c["number"]
         line, children = heading_brief(out_dir, stem, number)
         brief.update(question="Is this number a condition, or a heading for the "
                               "numbers beneath it?",

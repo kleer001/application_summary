@@ -7,8 +7,9 @@ different numbers of conditions have not — one of them stopped early.
 import re
 
 from adjudicate import adjudicate
+from verify import VERIFIED
 
-OK = ("pass", "null", "QUEUE")
+OK = VERIFIED + ("null",)          # "null" is the reader saying the page is silent
 from norm import norm as fold
 
 def values(field):
@@ -46,9 +47,10 @@ def contains(sa, sb):
 def combine_field(fa, fb, verdict_a, verdict_b):
     """One field, two readers.
 
-    Returns (entries, note, resolved). A note records what happened; `resolved`
-    says whether the rules settled it. Only the unresolved need a person, so the
-    two are kept apart rather than filed together as "queue".
+    Returns (entries, note, resolved, reason). The note is for a person to read
+    and is free to be reworded; `reason` is the machine-readable account of what
+    happened, and is what every consumer must switch on. They were once the same
+    string, which made rewording a message silently reclassify the entry.
     """
     # Three verdicts are answers, not failures. "null" is the reader saying the
     # document is silent. "QUEUE" is a quote the reader read off the scan that
@@ -59,16 +61,17 @@ def combine_field(fa, fb, verdict_a, verdict_b):
     ea, eb = values(fa) if ok_a else [], values(fb) if ok_b else []
 
     if not ok_a and not ok_b:
-        return [], f"neither reader verified ({verdict_a} / {verdict_b})", False
+        return ([], f"neither reader verified ({verdict_a} / {verdict_b})",
+                False, "neither_verified")
     if not ea and not eb:
         ra = (fa or {}).get("reason")
         rb = (fb or {}).get("reason")
         if ok_a and ok_b and ra != rb:
-            return [], f"both null, different reasons: {ra} / {rb}", False
-        return [], None, True                              # agreed null
+            return [], f"both null, different reasons: {ra} / {rb}", False, "both_null"
+        return [], None, True, "agree"                     # agreed null
 
     entries, verdict, note = adjudicate(ea, eb)
-    return entries, note, verdict != "conflict"
+    return entries, note, verdict != "conflict", verdict
 
 
 # A numbered item answering "not applicable" states no requirement, and a

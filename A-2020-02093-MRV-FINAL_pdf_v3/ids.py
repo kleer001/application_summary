@@ -44,9 +44,13 @@ def file_no_of(doc_id):
 
 @functools.lru_cache(maxsize=1)
 def corrections():
-    """stem -> the file number the document itself carries."""
-    if not os.path.exists(CORRECTIONS):
-        return {}
+    """stem -> the file number the document itself carries.
+
+    Not guarded by an existence check. corrections.json is part of the
+    repository, and returning an empty mapping when it is missing would
+    un-correct every row key in the workbook without saying anything — the
+    failure this module exists to prevent, caused by the module itself.
+    """
     return {stem: c["file_number"] for stem, c in json.load(open(CORRECTIONS)).items()}
 
 

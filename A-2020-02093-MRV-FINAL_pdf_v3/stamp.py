@@ -12,6 +12,8 @@ after a read lands, so it does not depend on a reader remembering to.
 """
 import hashlib, json, os, sys
 
+import paths
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 PASS_CONTRACT = {"a": "contract_a.md", "b": "contract_b.md"}
 
@@ -34,16 +36,8 @@ EQUIVALENT = {
 
 
 def out_dir(sandbox):
-    """Where a sandbox keeps reader output.
-
-    A sandbox staged by `wave.py` keeps it in `out/`; the repository keeps the
-    accumulated run in `run2/out/`. Resolve rather than assume — guessing wrong
-    fails at the end of a night, after the reads are already paid for.
-    """
-    for candidate in (f"{sandbox}/out", f"{sandbox}/run2/out"):
-        if os.path.isdir(candidate):
-            return candidate
-    raise SystemExit(f"no output directory under {sandbox} (tried out/, run2/out/)")
+    """Where a sandbox keeps reader output."""
+    return paths.out_dir(sandbox)
 
 
 def sha(path):
@@ -56,7 +50,7 @@ def current():
 
 def pass_of(name):
     """`<stem>.a1.json` -> `a`. The pass is in the suffix the work order assigns."""
-    return name.rsplit(".", 2)[1][0]
+    return paths.pass_of(name)
 
 
 def stamp(sandbox):

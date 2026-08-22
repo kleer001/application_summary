@@ -16,6 +16,8 @@ stated here as a parameter rather than a fact, so a better number can replace on
 line.
 """
 import json, os, re, sys
+
+from paths import resolve
 from collections import defaultdict
 
 # Reverse-engineered weekly ceilings, total tokens including cache reads.
@@ -57,7 +59,7 @@ def measure(dirs):
 
 def reads_done(sandbox):
     wave = json.load(open(f"{sandbox}/wave.json"))
-    done = sum(1 for o in wave if os.path.exists(o["out"]))
+    done = sum(1 for o in wave if os.path.exists(resolve(o["out"])))
     return done, len(wave) - done, len(wave)
 
 
