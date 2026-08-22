@@ -66,8 +66,20 @@ def retire(picked, sandbox_root):
             continue
         dest = os.path.join(sandbox_root, "superseded")
         os.makedirs(dest, exist_ok=True)
-        shutil.move(path, os.path.join(dest, os.path.basename(path)))
-        moved.append(os.path.basename(path))
+        # Named by the contract that produced it. A document read three times
+        # under three contracts supersedes twice, and moving each to its plain
+        # name would leave only the last — losing the very thing this directory
+        # is for. The stamp also says, from the filename alone, which version of
+        # the specification an old answer was given under.
+        stem, _, ext = os.path.basename(path).rpartition(".")
+        name = f"{stem}.{stamp_of(path)}.{ext}"
+        target = os.path.join(dest, name)
+        n = 2
+        while os.path.exists(target):
+            target = os.path.join(dest, f"{stem}.{stamp_of(path)}.{n}.{ext}")
+            n += 1
+        shutil.move(path, target)
+        moved.append(os.path.basename(target))
     return moved
 
 
