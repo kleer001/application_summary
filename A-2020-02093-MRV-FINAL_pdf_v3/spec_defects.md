@@ -94,11 +94,11 @@ Only the disagreements are recoverable this way. A parent that *both* readers
 dropped, and that did carry its own deliverable, leaves no trace on disk and would
 need the page read again. It is also invisible, so nothing here counts it.
 
-**Still to do at the re-read.** `contract_b.md` is deliberately not changed. Its
-current wording is the reason readers split, but rewording it now would mark every
-pass B read as produced under different instructions, and the rewording cannot be
-applied backwards the way the not-applicable rule was. Adopt "a condition is a
-specific individual deliverable", with the 5.2 example, when the corpus is re-read.
+**Adopted.** `contract_b.md` now carries the rule and the 5.2 example. Every pass
+B read taken under the earlier wording is stale — 88 of them — and both earlier
+pass B hashes have been withdrawn from `EQUIVALENT` in `stamp.py`, with the
+reason. `nightly.py` counts a stale read as outstanding, so the re-reading is
+ordinary nightly work rather than a separate campaign.
 
 **Known understatement.** One numbered line can hold more than one deliverable —
 two reports on different dates written into a single number. It stays one entry,

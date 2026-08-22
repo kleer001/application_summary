@@ -32,8 +32,15 @@ where they came from.
 From the repository root:
 
 ```
-python3 A-2020-02093-MRV-FINAL_pdf_v3/nightly.py
+python3 A-2020-02093-MRV-FINAL_pdf_v3/nightly.py --retire
 ```
+
+A read is outstanding when its output is missing, and equally when its output was
+produced under a contract that has since changed in a way that can alter the
+answer. `--retire` moves such an answer into `superseded/` before the re-read, so
+the new one has somewhere to land and the old one survives as evidence of what
+the page was read to say under the earlier contract. Without the flag the same
+list is printed and nothing is moved, which is how to look without acting.
 
 **If it exits 3, there is nothing left to read.** Skip steps 2 and 3 and go
 straight to step 4: a corpus that has been read through is not a corpus whose

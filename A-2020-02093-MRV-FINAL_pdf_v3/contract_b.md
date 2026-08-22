@@ -123,12 +123,33 @@ every numbered item you find.
 - One entry per numbered condition, in document order, at the finest numbering
   the document uses.
 
-  **A number earns an entry when it states an obligation of its own.** Where
-  `4.4` carries a requirement and `4.4.1` and `4.4.2` carry further ones, all
-  three are entries. Where `4.4` is only a label introducing its children — a
-  bare heading such as `Explosives:` or `The Proponent shall:` — it is not an
-  entry and its children are. Read the number's own text and ask whether dropping
-  it would lose a requirement.
+  **A condition is a specific individual deliverable** — something to be done,
+  submitted, built, monitored or stopped, that somebody could be held to. A
+  number earns an entry when it states one of its own. Where `4.4` carries a
+  requirement and `4.4.1` and `4.4.2` carry further ones, all three are entries.
+  Where `4.4` only introduces its children — a bare heading such as
+  `Explosives:` or `The Proponent shall:` — it is not an entry and its children
+  are.
+
+  **The word `shall` does not settle it.** Umbrella lines are routinely written
+  as obligations and still impose nothing of their own:
+
+  > `5.2` List of reports to be provided to DFO: The Proponent shall report to
+  > DFO on whether the offsetting measures were conducted according to the
+  > conditions of this authorization by providing the following:
+  > > `5.2.1` A post-construction monitoring report ... by March 31, 2022.
+  > > `5.2.2` Offsetting monitoring reports ... by December 31 (2022–2026).
+
+  `5.2` is a heading. It announces the list and points at it; the deliverables
+  and their dates are `5.2.1` and `5.2.2`. The test is not whether the line reads
+  like an obligation but whether **dropping it would lose a deliverable that is
+  not already stated beneath it**. Where the parent binds something its children
+  do not — a deadline governing all of them, a standard they must all meet, a
+  report the children never name — it is an entry and so are they.
+
+  One numbered line can hold more than one deliverable: two reports on different
+  dates written into a single number. That does not make it a heading, and it
+  does not become two entries. Record it as the one entry its number gives it.
 
   **A numbered item answering "not applicable" is not an entry.** A condition is
   a requirement of the authorization, and `3.2 Other conditions related to

@@ -21,11 +21,16 @@ PASS_CONTRACT = {"a": "contract_a.md", "b": "contract_b.md"}
 # quote it, or the shape written out does not belong here.
 EQUIVALENT = {
     "65cf28db2fd3": "pass A, differs only in the reply a reader is asked for",
-    "08ed9905cc09": "pass B, differs only in the reply a reader is asked for",
-    "b6885a580b3d": ("pass B, before the not-applicable rule was written down; "
-                     "combine.py drops those items from every read whatever the "
-                     "reader did, so the workbook is the same either way"),
 }
+
+# Both earlier pass B hashes were listed here and have been withdrawn. They were
+# equivalent to the pass B contract as it then stood; they are not equivalent to
+# the one in force, which settles what a condition is — a specific individual
+# deliverable, so a line that only introduces the deliverables below it is a
+# heading. That changes which numbers earn an entry, and unlike the
+# not-applicable rule it cannot be applied to an answer after the fact: whether a
+# parent carried a deliverable of its own is not recoverable from an entry a
+# reader chose not to write. Every pass B read taken before it is stale.
 
 
 def out_dir(sandbox):

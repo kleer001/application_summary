@@ -13,7 +13,9 @@ Run from the repository root:
 Exit status is 0 while work remains and 3 when the corpus is finished, so a
 scheduled run can stop without a person deciding it is done.
 """
-import json, os, sys
+import json, os, shutil, sys
+
+from stamp import EQUIVALENT, current
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -30,8 +32,43 @@ def load():
     return cfg, wave
 
 
+def stamp_of(path):
+    try:
+        return json.load(open(path)).get("contract", "UNSTAMPED")
+    except (OSError, json.JSONDecodeError):
+        return "UNSTAMPED"
+
+
 def outstanding(wave):
-    return [o for o in wave if not os.path.exists(o["_out_abs"])]
+    """Reads with no answer, and reads whose answer is no longer current.
+
+    A read is outstanding when its output is missing, and equally when the
+    output was produced under a contract that has since changed in a way that
+    can alter the answer. Without the second test a contract change is a
+    decision nothing acts on: the files are all present, so nothing is ever
+    selected, and the corpus keeps its old answers for good.
+    """
+    live = set(current().values()) | set(EQUIVALENT)
+    return [o for o in wave
+            if not os.path.exists(o["_out_abs"]) or stamp_of(o["_out_abs"]) not in live]
+
+
+def retire(picked, sandbox_root):
+    """Move a superseded answer aside so the re-read has somewhere to land.
+
+    Kept rather than overwritten: it was a real reading of the page, and which
+    contract a figure came from is part of its provenance.
+    """
+    moved = []
+    for o in picked:
+        path = o["_out_abs"]
+        if not os.path.exists(path):
+            continue
+        dest = os.path.join(sandbox_root, "superseded")
+        os.makedirs(dest, exist_ok=True)
+        shutil.move(path, os.path.join(dest, os.path.basename(path)))
+        moved.append(os.path.basename(path))
+    return moved
 
 
 def tonight(cfg, wave):
@@ -65,6 +102,11 @@ if __name__ == "__main__":
     if not left:
         print("NOTHING OUTSTANDING — the corpus is fully read.")
         sys.exit(FINISHED)
+
+    if "--retire" in sys.argv:
+        moved = retire(picked, os.path.dirname(picked[0]["_out_abs"]).rsplit(os.sep, 1)[0])
+        if moved:
+            print(f"# retired {len(moved)} superseded answer(s) to superseded/")
 
     print(f"# {len(picked)} reads over {len(docs)} documents; "
           f"{len(left)} of {len(wave)} outstanding before tonight")
