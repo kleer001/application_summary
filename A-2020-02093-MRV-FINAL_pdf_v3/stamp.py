@@ -15,15 +15,30 @@ import hashlib, json, os, sys
 import paths
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PASS_CONTRACT = {"a": "contract_a.md", "b": "contract_b.md"}
+# What a pass reads its question from. Pass A's question is the contract and the
+# field specification together: a field definition settles what a reader
+# extracts and how it is written down exactly as the contract does, so a
+# specification change that left the stamp where it was would leave every
+# earlier answer marked current while it answered a different question -- the
+# silent case this stamp exists to prevent. Pass B enumerates conditions under
+# contract_b and carries no fields at all, so the specification is not part of
+# its stamp and a change to it does not cost a pass B re-read.
+PASS_SOURCES = {"a": ("contract_a.md", "fields.json"), "b": ("contract_b.md",)}
 
 # Contract versions whose differences from the one in force cannot change an
 # answer, so answers produced under them need no re-reading. A hash goes here
 # only with the reason it is harmless; anything touching what to extract, how to
 # quote it, or the shape written out does not belong here.
-EQUIVALENT = {
-    "65cf28db2fd3": "pass A, differs only in the reply a reader is asked for",
-}
+EQUIVALENT = {}
+
+# "65cf28db2fd3" was listed here and has been withdrawn. It was equivalent to
+# the pass A contract as it then stood, and that equivalence was about the
+# contract alone. The field specification is now part of pass A's stamp, and it
+# has since changed: monitoring_duration no longer prescribes which form of
+# words an answer must take, and monitoring_frequency now bounds the span of the
+# quote. Both settle what a reader writes down, so an answer given before them
+# is not the answer that would be given now. Every pass A read taken before this
+# is stale.
 
 # Both earlier pass B hashes were listed here and have been withdrawn. They were
 # equivalent to the pass B contract as it then stood; they are not equivalent to
@@ -40,12 +55,17 @@ def out_dir(sandbox):
     return paths.out_dir(sandbox)
 
 
-def sha(path):
-    return hashlib.sha256(open(path, "rb").read()).hexdigest()[:12]
+def sha(*paths):
+    """One hash over several files, in the order given."""
+    h = hashlib.sha256()
+    for path in paths:
+        h.update(open(path, "rb").read())
+    return h.hexdigest()[:12]
 
 
 def current():
-    return {p: sha(os.path.join(HERE, f)) for p, f in PASS_CONTRACT.items()}
+    return {p: sha(*(os.path.join(HERE, f) for f in files))
+            for p, files in PASS_SOURCES.items()}
 
 
 def pass_of(name):
