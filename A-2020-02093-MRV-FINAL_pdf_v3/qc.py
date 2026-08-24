@@ -13,18 +13,18 @@ adjudication whose every non-agreement is recorded.
 A workbook can pass control and fail assurance, and the reverse. Both are
 reported, and neither is a percentage: a checkable cell either is or is not.
 """
-import hashlib, json, os, sys
+import hashlib, json, os, re, sys
 from collections import Counter, defaultdict
 
 import openpyxl
 
 from adjudicate import adjudicate
-from build import INFERRED, PRIOR, VOCABULARIES
+from build import INFERRED, PRIOR, VOCABULARIES, adjudications
 from norm import on_page
 from ids import corrected
 from paths import complete_stems
 from stamp import current as contracts_in_force, pass_of, sha, stamp_of
-from verify import FAILED, VERIFIED, check_conditions, load_pages, verdicts_for
+from verify import FAILED, VERIFIED, check_conditions, check_field, load_pages, verdicts_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -58,6 +58,20 @@ def control(sandbox, xlsx):
                 checked[f"condition:{verdict}"] += 1
                 if verdict == "REJECT":
                     rejected_conditions.add((corrected(o["stem"], o["file_number"]), str(num)))
+
+        # An adjudicated answer is a verified answer too, where it verifies. Pass
+        # C reads the pages a reader read and may find what the reader could not,
+        # which is the whole point of the briefs that carry a question rather
+        # than two candidates. Re-checked here rather than taken from the build:
+        # this file exists to test that workbook, not to agree with it.
+        for name, a in adjudications(sandbox, o["doc_id"]).items():
+            if not a.get("entries") or name.startswith(("condition ", "heading ")):
+                continue
+            verdict = check_field(name, {"entries": a["entries"]}, load_pages(o["slice"]),
+                                  o["last_page"] - o["first_page"] + 1)[1]
+            checked[f"adjudicated:{verdict}"] += 1
+            if verdict in VERIFIED:
+                verified.add((corrected(o["stem"], o["file_number"]), name))
 
     # 2. no cell in the summary carries an unadjudicated conflict
     conflicts = set()
@@ -196,8 +210,11 @@ def contracts_used(sandbox, pass_name):
                      for h, n in seen.most_common())
 
 
-# What each reason costs a person. Keyed on the code the build stamps on the
-# entry, not on the sentence beside it — the sentence is free to be reworded.
+# What each reason still owes, and to whom. Keyed on the code the build stamps
+# on the entry, not on the sentence beside it — the sentence is free to be
+# reworded. Every code here is work pass C takes: an adjudicator is given the
+# scan as well as the two answers, which is what lets it settle "what does the
+# page say" and not only "which of these two is right".
 WORKLOAD = {
     "conflict": "a field conflict pass C has not settled",
     "heading_dispute": "a number one reader read as a heading",
@@ -209,12 +226,102 @@ WORKLOAD = {
 }
 
 
+# A condition pointing at a number the document does not carry. Both readers can
+# read such a line correctly and agree about it, so no amount of agreement finds
+# it: the defect is the document's, and it is visible only by following the
+# reference to its target. Observed in this release: 4.4.1.3 of 19-HCAA-00130
+# requires targets "described in conditions 4.3.5 and 4.3.6" where section 4.3
+# ends at 4.3.5.
+#
+# Only references of two components or more are followed. "Condition 5" names a
+# whole section, which is a heading and not necessarily a recorded number, and
+# checking those reports the document's own structure as a fault.
+REFERENCE = re.compile(
+    r"\b(?:conditions?|sections?|articles?|paragraphes?)\s+"
+    r"((?:\d+\.){1,4}\d+)((?:\s*(?:,|and|et|or|ou)\s*(?:\d+\.){1,4}\d+)*)",
+    re.I)
+EXTERNAL = re.compile(r"^\s*(of|de|du)\s+(the|l|la|le)?", re.I)
+
+
+# A number alone on its line counts: "4.4." with its text on the line below is
+# how the scanner renders a heading whose wording wrapped.
+NUMBERED_LINE = re.compile(r"^\s*((?:\d+\.){1,4}\d*)\.?(?:\s|$)")
+
+
+def numbers_printed(slice_path):
+    """Every number the document itself prints at the start of a line.
+
+    Taken from the page text rather than from what the readers kept, because a
+    parent ruled a heading is dropped from the workbook while remaining a number
+    the document prints. Checking references against the kept set would report
+    this pipeline's own decisions as the document's errors.
+    """
+    if not os.path.exists(slice_path):
+        return set()
+    out = set()
+    for line in open(slice_path, encoding="utf-8", errors="replace"):
+        m = NUMBERED_LINE.match(line)
+        if m:
+            out.add(m.group(1).rstrip("."))
+    # A parent every one of whose children is printed is itself a number the
+    # document carries, whether or not its own line survived the scan. Without
+    # this, a reference to "4.2" is reported as dangling on a document that
+    # prints 4.2.1 through 4.2.5.
+    for n in list(out):
+        parts = n.split(".")
+        for i in range(1, len(parts)):
+            out.add(".".join(parts[:i]))
+    return out
+
+
+def cross_references(sandbox):
+    """Numbers a document's own conditions cite that the document never prints.
+
+    Both readers can read such a line correctly and agree about it, so no amount
+    of agreement finds it: the defect is the document's, and it is visible only
+    by following the reference to its target.
+    """
+    orders = {o["stem"]: o for o in json.load(open(f"{sandbox}/wave.json"))}
+    dangling = set()
+    for stem in sorted(complete_stems(sandbox)):
+        order = orders.get(stem)
+        if not order:
+            continue
+        present = numbers_printed(order["slice"])
+        for tag in ("b1", "b2"):
+            path = f"{sandbox}/out/{stem}.{tag}.json"
+            if not os.path.exists(path):
+                continue
+            for c in json.load(open(path)).get("conditions") or []:
+                if c.get("number"):
+                    present.add(str(c["number"]).rstrip("."))
+        for tag in ("b1", "b2"):
+            path = f"{sandbox}/out/{stem}.{tag}.json"
+            if not os.path.exists(path):
+                continue
+            for c in json.load(open(path)).get("conditions") or []:
+                text = c.get("text") or ""
+                for m in REFERENCE.finditer(text):
+                    if EXTERNAL.match(text[m.end():m.end() + 12]):
+                        continue              # a section of some other document
+                    cited = [m.group(1)] + re.findall(r"(?:\d+\.){1,4}\d+", m.group(2) or "")
+                    for target in cited:
+                        if target.rstrip(".") not in present:
+                            dangling.add((stem, str(c.get("number")), target))
+    return sorted(dangling)
+
+
 def workload(xlsx):
-    """What the queue actually asks of a person, read off the sheet itself.
+    """What the queue still has to settle, read off the sheet itself.
 
     Reported here, from the artifact, because a summary written by hand drifts
     toward whatever the writer last remembered. A queue that files advisories as
     work overstates what is owed, and an overstated queue gets ignored.
+
+    These are adjudications outstanding, not questions for a person. What makes
+    that safe is not that an adjudicator is never wrong: it is that every value
+    it writes carries the pages it came from, and the check above fails the
+    workbook if a quote is not on the pages its own row cites.
     """
     wb = openpyxl.load_workbook(xlsx, data_only=True)
     decisions = list(wb["Review_Queue"].iter_rows(min_row=2, values_only=True))
@@ -242,13 +349,24 @@ if __name__ == "__main__":
     else:
         print("    PASS  no cell in this workbook fails its own check")
 
+    # Reported, never fatal. The workbook is not wrong because the document is;
+    # what would be wrong is copying the reference out without saying so.
+    dangling = cross_references(sandbox)
+    print("\n\nWHAT THE DOCUMENTS THEMSELVES GET WRONG\n")
+    if dangling:
+        for stem, number, target in dangling:
+            print(f"    {stem} condition {number} cites {target}, which the "
+                  f"document never prints")
+    else:
+        print("    none — every condition cross-reference resolves")
+
     print("\n\nQUALITY ASSURANCE — was it produced the way the plan requires?\n")
     for k, v in assurance(sandbox, xlsx, conflicts).items():
         print(f"    {k:38} {v}")
 
     decisions, notes, kinds = workload(xlsx)
-    print(f"\n\nWHAT THE QUEUE ASKS OF A PERSON\n")
-    print(f"    {decisions:6}  decisions owed")
+    print(f"\n\nWHAT THE QUEUE STILL HAS TO SETTLE\n")
+    print(f"    {decisions:6}  adjudications outstanding")
     for k, n in kinds.most_common():
         print(f"    {n:6}    {k}")
     print(f"    {notes:6}  notes, needing no decision")
