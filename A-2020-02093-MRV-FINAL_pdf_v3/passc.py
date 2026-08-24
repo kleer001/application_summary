@@ -19,12 +19,13 @@ One line per adjudication, tab-separated:
 
     stem <TAB> field <TAB> model <TAB> brief <TAB> fields <TAB> slice <TAB> pdf <TAB> out
 
-Only field conflicts are listed. A condition whose text is not on its cited page
-and a field neither reader verified are both real work, but they are a different
-job from choosing between two readings and contract_c.md does not describe them.
-A conflict is also held back while either of its two reads is on a contract no
-longer in force: re-reading can change the answers a ruling was made between.
-The counts of both are printed.
+Three kinds of brief are listed, all of them adjudications: a field two readers
+answered differently, a number one read as a heading, and — carrying a question
+rather than two candidates — a field neither reader verified or a condition whose
+text is not on its cited page. The last kind is settled by reading the scan,
+which the adjudicator is given, so it is work pass C takes rather than work that
+leaves the pipeline. The count resting on a read taken under an earlier contract
+is printed beside the total, as information.
 
 Exit status is 0 while adjudications remain and 3 when none do.
 """
@@ -38,9 +39,20 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(HERE, "nightly.json")
 MODEL = "opus"                 # measured: a Sonnet adjudicator under-collects
 
-# The two questions contract_c.md describes. A conflict reaches an adjudicator
-# because its reason says so, never because of how its `why` sentence is worded.
-ADJUDICABLE = ("conflict", "heading_dispute")
+# The three questions contract_c.md describes, and which reads each rests on.
+# An entry reaches an adjudicator because its reason says so, never because of
+# how its `why` sentence is worded.
+#
+# "page" is the third kind. Where a conflict asks which of two answers the
+# document supports, these ask what the document says at all: nobody produced a
+# quote that verified, so there is nothing to choose between. An adjudicator is
+# given the scan as well as the excerpt, which is what settles them — the same
+# reading a reader does, done once more against the page.
+KIND = {"conflict": "field", "heading_dispute": "heading",
+        "neither_verified": "page", "condition_off_page": "page"}
+READS = {"field": ("a1", "a2"), "heading": ("b1", "b2"),
+         "page": ("a1", "a2")}          # overridden per entry for a condition
+ADJUDICABLE = tuple(KIND)
 NONE_OUTSTANDING = 3
 
 
@@ -49,16 +61,16 @@ def slug(field):
     return re.sub(r"[^a-z0-9]+", "_", field.lower()).strip("_")
 
 
-def on_a_live_contract(sandbox):
-    """Reader files read under a contract still in force, or equivalent to one.
+def on_an_earlier_contract(sandbox):
+    """Reader files read under a contract no longer in force.
 
-    A ruling is made against two particular answers. Re-reading a document under
-    a newer contract can change those answers, and the ruling would still be
-    sitting there keyed to the field. So a document is not adjudicated until the
-    reads underneath it are ones the corpus intends to keep.
+    Counted and reported, never gated on. A ruling is made against the two
+    answers actually on disk, and those are the answers the corpus keeps: reads
+    are not re-taken because a definition was reworded. Gating adjudication on a
+    live stamp would hold every conflict until a re-read that is never coming.
     """
     ok = live()
-    return {f for h, files in survey(sandbox).items() if h in ok for f in files}
+    return {f for h, files in survey(sandbox).items() if h not in ok for f in files}
 
 
 def orders_by_stem(sandbox):
@@ -121,29 +133,46 @@ def outstanding(sandbox):
     ruling_dir = f"{sandbox}/adjudicated"
     ruled = set(os.listdir(ruling_dir)) if os.path.isdir(ruling_dir) else set()
 
-    on_contract = on_a_live_contract(sandbox)
+    earlier = on_an_earlier_contract(sandbox)
     picked, other, stale = [], 0, 0
     for c in conflicts:
         if c["reason"] not in ADJUDICABLE:
             other += 1
             continue
-        heading = c["reason"] == "heading_dispute"
+        kind = KIND[c["reason"]]
         stem = stem_of(c["document"])
-        reads = ("b1", "b2") if heading else ("a1", "a2")
-        if not all(f"{stem}.{t}.json" in on_contract for t in reads):
+        reads = (("b1", "b2") if c["reason"] == "condition_off_page"
+                 else READS[kind])
+        if any(f"{stem}.{t}.json" in earlier for t in reads):
             stale += 1
-            continue
         order = orders.get(stem)
         if order is None:
             raise KeyError(f"{stem} is in conflicts.json but not in the work order")
         name = f"{stem}.{slug(c['field'])}.json"
         if name in ruled:
             continue                                  # already ruled on
-        picked.append((c, stem, order, name, heading))
+        picked.append((c, stem, order, name, kind))
     return picked, other, stale
 
 
-def write_brief(sandbox, c, stem, order, name, heading):
+def condition_brief(out_dir, stem, number):
+    """A condition as each reader wrote it down, with the page each one cited.
+
+    Both readers are shown because they may have cited different pages for the
+    same text, which is itself the answer: one of them read the page number off
+    a running header rather than the line.
+    """
+    seen = []
+    for tag in ("b1", "b2"):
+        for cond in read_out(out_dir, stem, tag).get("conditions") or []:
+            if ".".join(str(x) for x in number_key(cond.get("number"))) == number:
+                seen.append({"reader": tag, "number": cond.get("number"),
+                             "page": cond.get("page"), "text": cond.get("text"),
+                             "source": cond.get("source")})
+    return seen
+
+
+def write_brief(sandbox, c, stem, order, name, kind):
     """The brief for one adjudication, and its line of the work order."""
     brief_dir = f"{sandbox}/passc"
     os.makedirs(brief_dir, exist_ok=True)
@@ -154,12 +183,25 @@ def write_brief(sandbox, c, stem, order, name, heading):
         "pages": [1, order["last_page"] - order["first_page"] + 1],
         "disagreement": c["why"],
     }
-    if heading:
+    if kind == "heading":
         number = c["number"]
         line, children = heading_brief(out_dir, stem, number)
         brief.update(question="Is this number a condition, or a heading for the "
                               "numbers beneath it?",
                      number=number, line=line, children=children)
+    elif kind == "page":
+        if c["reason"] == "condition_off_page":
+            number = ".".join(str(x) for x in number_key(c["field"].split()[-1]))
+            brief.update(question="This condition's text is not on the page it "
+                                  "cites. What does the scan show, and on which "
+                                  "page?",
+                         number=number,
+                         as_recorded=condition_brief(out_dir, stem, number))
+        else:
+            brief.update(question="Neither reader produced a quote that verified. "
+                                  "What does the document say for this field?",
+                         reader_1=entries_as_written(out_dir, stem, "a1", c["field"]),
+                         reader_2=entries_as_written(out_dir, stem, "a2", c["field"]))
     else:
         brief.update(reader_1=entries_as_written(out_dir, stem, "a1", c["field"]),
                      reader_2=entries_as_written(out_dir, stem, "a2", c["field"]))
@@ -174,7 +216,8 @@ if __name__ == "__main__":
     sandbox = sys.argv[1]
     picked, other, stale = outstanding(sandbox)
     cap = json.load(open(CONFIG))["adjudications_per_night"]
-    print(f"# {len(picked)} adjudications outstanding; {stale} waiting on a re-read; "
+    print(f"# {len(picked)} adjudications outstanding "
+          f"({stale} resting on a read taken under an earlier contract); "
           f"{other} queue entries are a different job and are not listed")
     for args in picked[:cap]:
         print("\t".join(write_brief(sandbox, *args)))

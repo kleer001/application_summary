@@ -169,7 +169,14 @@ def read_document(order, queue):
                                                 checked["2"].get(name, "missing"))
         if not resolved and name in ruled:
             a = ruled[name]
-            if a.get("winner") != "unresolved" and a.get("entries"):
+            if a.get("winner") == "absent":
+                # The adjudicator read the pages and the field is not on them.
+                # That is an answer: the cell is empty because the document is
+                # silent, which is different from empty because nobody could
+                # verify a quote, and only one of the two is settled.
+                entries, resolved, reason = [], True, "passc_settled"
+                note = f'pass C (absent): {a.get("reason", "")[:110]}'
+            elif a.get("winner") != "unresolved" and a.get("entries"):
                 # An adjudicated answer is checked exactly as a reader's is. The
                 # adjudicator is a better reader, not an exempt one, and a cell
                 # it certifies has to be findable on the page it cites.
@@ -201,9 +208,14 @@ def read_document(order, queue):
     kept = []
     for t, d in cond_docs.items():
         verdicts = cond_verdicts[t]
+        def ruled_absent(c):
+            r = ruled.get(f"condition {c.get('number')}")
+            return bool(r) and r.get("winner") == "absent"
+
         kept.append([c for c in d.get("conditions", []) or []
-                     if verdicts.get(c.get("number")) in VERIFIED
-                     or f"condition {c.get('number')}" in ruled])
+                     if not ruled_absent(c)
+                     and (verdicts.get(c.get("number")) in VERIFIED
+                          or f"condition {c.get('number')}" in ruled)])
         for c in d.get("conditions", []) or []:
             v = verdicts.get(c.get("number"))
             if v == "pass":
@@ -221,6 +233,14 @@ def read_document(order, queue):
                     "document": order["doc_id"], "field": name,
                     "why": f'pass C located it: {ruling.get("reason", "")[:110]}',
                     "resolved": True, "reason": "condition_located"})
+                continue
+            if ruling and ruling.get("winner") == "absent":
+                # Read against the scan, the number carries no condition. It is
+                # dropped from the sheet rather than left in it uncheckable.
+                queue.append({
+                    "document": order["doc_id"], "field": name,
+                    "why": f'pass C found nothing there: {ruling.get("reason", "")[:100]}',
+                    "resolved": True, "reason": "condition_absent"})
                 continue
             queue.append({
                 "document": order["doc_id"], "field": name,

@@ -32,15 +32,16 @@ where they came from.
 From the repository root:
 
 ```
-python3 A-2020-02093-MRV-FINAL_pdf_v3/nightly.py --retire
+python3 A-2020-02093-MRV-FINAL_pdf_v3/nightly.py
 ```
 
-A read is outstanding when its output is missing, and equally when its output was
-produced under a contract that has since changed in a way that can alter the
-answer. `--retire` moves such an answer into `superseded/` before the re-read, so
-the new one has somewhere to land and the old one survives as evidence of what
-the page was read to say under the earlier contract. Without the flag the same
-list is printed and nothing is moved, which is how to look without acting.
+A read is outstanding when its output is missing, and only then. A document
+already read is never selected again, even when the contract or a field
+definition has been reworded since: the answer on disk still describes the page,
+and re-reading the corpus every time a definition is sharpened means the reading
+never finishes. `--status` reports how many answers were given under an earlier
+contract, as information. Acting on it is a deliberate decision taken outside the
+nightly, normally by re-reading a sample rather than everything.
 
 **If it exits 3, there is nothing left to read.** Skip steps 2 and 3 and go
 straight to step 4: a corpus that has been read through is not a corpus whose
@@ -138,12 +139,14 @@ Spawn one `page-reader` subagent per line, on the model in column 3, and hand it
 exactly this:
 
 ```
-Adjudicate one disagreement between two readers of an authorization document.
+Settle one open question about an authorization document.
 
 Your instructions are the contract file. Read it first and follow it exactly.
+The brief says which of the three questions it carries; answer that one.
 
 - contract: A-2020-02093-MRV-FINAL_pdf_v3/contract_c.md
-- the disagreement, with both readers' answers and what each cited: <column 4>
+- the brief — two readers' answers, a disputed number, or a question about
+  what the page says: <column 4>
 - field specification: <column 5>
 - text excerpt: <column 6>
 - PDF of the same pages: <column 7>
