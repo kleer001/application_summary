@@ -55,10 +55,13 @@ def out_dir(sandbox):
     return paths.out_dir(sandbox)
 
 
-def sha(*paths):
-    """One hash over several files, in the order given."""
+def sha(*files):
+    """One hash over several files, in the order given.
+
+    Not named `paths`: this module imports a module of that name.
+    """
     h = hashlib.sha256()
-    for path in paths:
+    for path in files:
         h.update(open(path, "rb").read())
     return h.hexdigest()[:12]
 

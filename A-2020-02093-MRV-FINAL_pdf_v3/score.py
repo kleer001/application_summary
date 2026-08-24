@@ -9,9 +9,9 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build import assemble
-from ids import FILE_RX
+from ids import FILE_RX, corrected
 from norm import norm
-from paths import ROOT
+from paths import ROOT, complete_stems
 from verify import check
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -112,7 +112,7 @@ def same(kind, truth, got):
     return t in g or g in t
 
 
-def main(sandbox, wave=None, half="tune"):
+def main(sandbox, half="tune"):
     """The work order carries the page range and the stem; do not re-derive them.
 
     `half` names which side of the split to score. It defaults to the tuning
@@ -127,16 +127,24 @@ def main(sandbox, wave=None, half="tune"):
     amendment; both were counted as misses and neither was one. `assemble`
     merges them the way the workbook does, so that is what gets scored.
     """
-    orders = json.load(open(wave or f"{sandbox}/wave.json"))
+    # `assemble` reads the sandbox's own work order, so this reads the same one.
+    # An alternative wave was once accepted here and is not any more: it would
+    # have verified quotes over one set of documents and measured agreement over
+    # another, which is worse than not offering the option.
+    orders = json.load(open(f"{sandbox}/wave.json"))
     keep = None
     if half != "all":
         keep = set(json.load(open(os.path.join(HERE, "split.json")))[half])
-        orders = [o for o in orders if o["file_number"] in keep]
+        # The split names file numbers as the documents carry them, and a row is
+        # filed under the corrected one; compare like with like on both sides.
+        orders = [o for o in orders if corrected(o["stem"], o["file_number"]) in keep]
     truth = truth_rows()
     ver = Counter()
     agree = Counter()
     skipped = Counter()
-    unread = set()
+    complete = complete_stems(sandbox)
+    unread = {corrected(o["stem"], o["file_number"]) for o in orders
+              if o["stem"] not in complete}
     detail = []
 
     # Quote verification stays per reader: it asks whether each reader put its
@@ -149,7 +157,6 @@ def main(sandbox, wave=None, half="tune"):
         for tag in ("a1", "a2"):
             p = f"{sandbox}/out/{stem}.{tag}.json"
             if not os.path.exists(p):
-                unread.add(order["file_number"])
                 continue
             for _, verdict, _ in check(json.load(open(p)), sl, lo, hi):
                 ver[verdict] += 1
@@ -217,10 +224,12 @@ def main(sandbox, wave=None, half="tune"):
         print("\n=== misses ===")
         for d in detail:
             print(f"   {d[0]:16s} {d[1]:22s} workbook={d[2]:36s} extracted={d[3]}")
+            if ";" in d[4]:            # only worth saying when the row is a merge
+                print(f"   {'':16s} {'':22s} from {d[4]}")
 
 
 if __name__ == "__main__":
-    # score.py <sandbox> [wave.json] [tune|holdout|all]
+    # score.py <sandbox> [tune|holdout|all]
     args = sys.argv[1:]
     half = args.pop() if args and args[-1] in ("tune", "holdout", "all") else "tune"
-    main(args[0], args[1] if len(args) > 1 else None, half)
+    main(args[0], half)
