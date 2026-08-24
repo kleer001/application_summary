@@ -131,6 +131,16 @@ every numbered item you find.
   `Explosives:` or `The Proponent shall:` — it is not an entry and its children
   are.
 
+  **A line that is only a label is a heading, and this is the common case.** A
+  number whose whole text is a topic or a place — `Explosives`, `Invasive
+  Species`, `Pile driving`, `Hazen Creek:`, `Sediment and erosion control:`,
+  `Other conditions related to offsetting:` — states no deliverable and is not an
+  entry. The trailing colon is a cue, not a requirement: `2.4.2 Explosives` and
+  `2.4.2 Explosives:` are both headings. Deeply numbered documents are full of
+  these, and a label does not become an obligation because the numbers beneath it
+  carry one. Settle a line like this on sight and spend the judgement below on
+  the lines that need it.
+
   **The word `shall` does not settle it.** Umbrella lines are routinely written
   as obligations and still impose nothing of their own:
 
@@ -146,6 +156,58 @@ every numbered item you find.
   not already stated beneath it**. Where the parent binds something its children
   do not — a deadline governing all of them, a standard they must all meet, a
   report the children never name — it is an entry and so are they.
+
+  **A parent that only points at its own children adds nothing.** This is what
+  most often splits two readers, because the pointing is nearly always written as
+  an obligation. `Schedule(s) and criteria: The Proponent shall conduct
+  monitoring of the implementation of offsetting measures according to the
+  timeline and criteria below:` binds no timeline of its own — "below" *is* the
+  children, and every criterion is in them. It is a heading. Phrases that point
+  inward this way: `below`, `the following`, `as follows`, and in French
+  `ci-dessous`, `énoncés ci-dessous`, `ce qui suit`, `suivants`.
+
+  Where a parent names something **outside** itself, ask what that naming does.
+  It makes the parent an entry only where the children must comply with the thing
+  named:
+
+  > `5.1` The Proponent shall conduct monitoring of the implementation of
+  > offsetting measures **according to the timeline and criteria in the
+  > offsetting plan approved by DFO, referred to in conditions 4.2 and 4.3**
+
+  Delete `5.1` and the requirement to follow the approved plan is gone: the
+  children say what to observe, not what governs it. `5.1` is an entry.
+
+  It does **not** make the parent an entry where the outward phrase only says
+  what the children are about:
+
+  > `5.2` The Proponent shall report to DFO on **whether the offsetting measures
+  > were conducted according to the conditions of this authorization** by
+  > providing the following:
+
+  Delete `5.2` and nothing is lost — `5.2.1` still requires its report and still
+  carries its own deadline. "According to the conditions of this authorization"
+  names the subject the report is about, not a standard the report must meet.
+  `5.2` is a heading. The same sentence appears in French and is read the same
+  way: `selon les conditions de la présente autorisation en fournissant ce qui
+  suit`.
+
+  **A parent commonly does both at once, and the outward half decides it.** The
+  inward phrase is easy to spot and stops a careless reader early:
+
+  > `4.2` Scale and description of offsetting measures: The offsetting measures
+  > shall be carried out in accordance with the measures **set out in the
+  > Proponent's offsetting plan detailed in the Application**, and summarized
+  > **below**:
+
+  "Summarized below" points at `4.2.1` and `4.2.2`; on its own it would make
+  `4.2` a heading. But the same sentence also incorporates the full offsetting
+  plan, and the children are only a summary of it — delete `4.2` and that
+  incorporation is gone. `4.2` is an entry. Read the whole line before deciding,
+  and where it points both ways, the outward half governs.
+
+  So the question is not whether the parent sounds binding, nor whether it
+  mentions something outside itself. It is whether deleting the line would remove
+  a requirement written nowhere else.
 
   One numbered line can hold more than one deliverable: two reports on different
   dates written into a single number. That does not make it a heading, and it
