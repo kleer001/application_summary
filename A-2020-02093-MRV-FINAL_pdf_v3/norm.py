@@ -9,8 +9,10 @@ import re
 
 # m2 renders every one of these ways in the scan. The letter variant is matched
 # only outside a word, or "monitoring" folds to "m2nitoring" and "confirm
-# offsetting" to "confirmoffsetting" with the m and the o eaten.
-SQ = r"m\s*[2²?7*°~^’']|m\s*o(?![a-z])"
+# offsetting" to "confirmoffsetting" with the m and the o eaten. The double
+# quotes are the superscript 2 read as a ditto mark, observed as "2 m" and
+# "3.3 km" in this release.
+SQ = r"m\s*[2²?7*°~^’'”\"″]|m\s*o(?![a-z])"
 
 
 # A date's ordinal suffix is set in superscript, and the scanner reads the
@@ -29,6 +31,29 @@ def norm(s):
     s = re.sub(SQ, " m2 ", str(s).lower())
     s = re.sub(ORD, "", s)
     return re.sub(r"[^a-z0-9]+", "", s)
+
+
+def wordset(s):
+    """The words of a value, folded by the rules `norm` already applies.
+
+    `norm` collapses a value to a single string. That preserves character order,
+    which is what containment needs, but it cannot see two readers naming the
+    same things in a different order, or one writing a figure with its unit and
+    the other without: "650 m2 180 m2" and "180 650" fold to strings that share
+    no prefix. This is the same fold stopping at word boundaries instead of
+    erasing them, so the two rules cannot disagree about m2 spellings or date
+    ordinals — the damage a second, independent fold would reintroduce.
+
+    A trailing "s" is dropped from words longer than three characters, because
+    "Paragraph" against "Paragraphs" and "measure" against "measures" are the
+    same word and the plural is the writer's, not the document's.
+    """
+    s = re.sub(SQ, " m2 ", str(s).lower())
+    s = re.sub(ORD, "", s)
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", s):
+        out.add(w[:-1] if len(w) > 3 and w.endswith("s") else w)
+    return out
 
 
 def tokens(s):
