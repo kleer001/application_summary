@@ -71,13 +71,26 @@ def check_field(name, f, folded, n):
         v, q, pg = e.get("value"), e.get("quote"), e.get("page")
         if v in (None, ""):
             bad.append(f"[{i}] entry with no value")
+        elif not isinstance(v, (str, int, float)) or isinstance(v, bool):
+            # A value is a thing the page says, and a cell holds one. An object
+            # or a list is neither: it reaches the workbook writer intact and
+            # fails there, after the build has done all its work. Caught here so
+            # it is queued like any other unusable answer.
+            bad.append(f"[{i}] value is {type(v).__name__}, not text")
         elif not q:
             bad.append(f"[{i}] value with no quote")
         elif not isinstance(pg, int) or not (1 <= pg <= n):
             bad.append(f"[{i}] page {pg} outside 1-{n}")
         elif not (how := on_page(q, *folded.get(pg, ("", set())))):
+            # A quote marked `image` is a claim that the text layer does not
+            # carry it. Finding the same words on another page of that layer does
+            # not refute the claim — a short phrase like a job title recurs, and
+            # the signature block it was read from can be mangled on the page it
+            # really sits on. So the wrong-page test is asked only of a quote
+            # that says it came from the text.
             nq = norm(q)
-            hit = next((p for p, (ft, _) in folded.items() if nq in ft), None)
+            hit = (None if e.get("source") == "image" else
+                   next((p for p, (ft, _) in folded.items() if nq in ft), None))
             if hit:
                 bad.append(f"[{i}] quote is on page {hit}, cited {pg}")
             elif e.get("source") == "image":
