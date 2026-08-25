@@ -125,14 +125,28 @@ def looks_truncated(text, page_folded):
     return bool(tail) and tail in page_folded[-90:]
 
 
-def check_conditions(doc, slice_path):
-    """Every numbered condition's text, against the page it starts on.
+def on_cited_page(text, folded, pg):
+    """Is this text on the page it cites, allowing for a page break?
 
-    A condition may run past the foot of its page, so the text is looked for on
-    the page it cites and the one after. Nothing else is admitted: a condition
-    sourced from anywhere in the document would make the page citation
-    decorative.
+    A condition may run past the foot of its page, so exact containment is
+    offered the cited page joined to the one after: a requirement that genuinely
+    straddles a break is still quoted whole, and the match must cross the seam to
+    succeed. The fuzzy fallback is not offered the join. Its threshold was
+    measured against the words of one page, and handing it two roughly doubles
+    the pool it can draw on to clear the bar.
+
+    That difference is not theoretical. Measured over the corpus, of the
+    conditions that failed their own page and passed the two-page test, two
+    crossed the seam and forty cleared the bar only on the doubled pool — a page
+    citation established by nothing but the neighbouring page's vocabulary.
     """
+    here = folded.get(pg, ("", set()))
+    joined = here[0] + folded.get(pg + 1, ("", set()))[0]
+    return on_page(text, joined, here[1])
+
+
+def check_conditions(doc, slice_path):
+    """Every numbered condition's text, against the page it starts on."""
     folded = load_pages(slice_path)
     rows = []
     for c in doc.get("conditions", []) or []:
@@ -142,11 +156,9 @@ def check_conditions(doc, slice_path):
         elif not isinstance(pg, int) or pg not in folded:
             rows.append((num, "REJECT", f"page {pg} is not a page of this document"))
         else:
-            spread_f = folded[pg][0] + folded.get(pg + 1, ("", set()))[0]
-            spread_t = folded[pg][1] | folded.get(pg + 1, ("", set()))[1]
-            how = on_page(text, spread_f, spread_t)
+            how = on_cited_page(text, folded, pg)
             if not how:
-                rows.append((num, "REJECT", "text not found on its page or the next"))
+                rows.append((num, "REJECT", "text not established on the page it cites"))
             elif looks_truncated(text, folded[pg][0]):
                 rows.append((num, "QUEUE", "ends at the foot of its page, mid-sentence"))
             else:

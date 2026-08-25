@@ -20,11 +20,12 @@ import openpyxl
 
 from adjudicate import adjudicate
 from build import INFERRED, PRIOR, VOCABULARIES, adjudications
-from norm import on_page
-from ids import corrected
+from norm import norm, on_page
+from ids import corrected, file_no_of, stem_of
 from paths import complete_stems
 from stamp import current as contracts_in_force, pass_of, sha, stamp_of
-from verify import FAILED, VERIFIED, check_conditions, check_field, load_pages, verdicts_for
+from verify import (FAILED, VERIFIED, check_conditions, check_field, load_pages,
+                    on_cited_page, verdicts_for)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -39,13 +40,14 @@ def control(sandbox, xlsx):
 
     findings, checked = [], Counter()
     rejected, rejected_conditions, verified = {}, set(), set()
+    filed = defaultdict(set)            # stem -> the authorizations it files under
 
     # 1. every reader answer that reached a cell verified against its own page
     for stem, o in by_stem.items():
         for tag in ("a1", "a2"):
             doc = json.load(open(f"{sandbox}/out/{stem}.{tag}.json"))
-            for name, verdict in verdicts_for(doc, o["slice"],
-                                              o["first_page"], o["last_page"]).items():
+            verdicts = verdicts_for(doc, o["slice"], o["first_page"], o["last_page"])
+            for name, verdict in verdicts.items():
                 checked[f"field:{verdict}"] += 1
                 if verdict in FAILED:
                     rejected.setdefault((corrected(o["stem"], o["file_number"]), name), []).append(
@@ -74,7 +76,6 @@ def control(sandbox, xlsx):
                 verified.add((corrected(o["stem"], o["file_number"]), name))
 
     # 2. no cell in the summary carries an unadjudicated conflict
-    conflicts = set()
     for stem, o in by_stem.items():
         A = json.load(open(f"{sandbox}/out/{stem}.a1.json"))["fields"]
         B = json.load(open(f"{sandbox}/out/{stem}.a2.json"))["fields"]
@@ -83,11 +84,15 @@ def control(sandbox, xlsx):
             eb = [e for e in (B.get(k) or {}).get("entries") or [] if e.get("value") not in (None, "")]
             if ea or eb:
                 entries, verdict, _ = adjudicate(ea, eb)
-                if verdict == "conflict":
-                    conflicts.add((corrected(o["stem"], o["file_number"]), k))
-                    if entries:
-                        findings.append(("a conflict resolved itself into a cell",
-                                         f"{stem} {k}"))
+                if verdict == "conflict" and entries:
+                    findings.append(("a conflict resolved itself into a cell",
+                                     f"{stem} {k}"))
+                # The adjudicated entries are what the build splits rows on, so
+                # they are what check 7 has to be asked about. Taken here rather
+                # than from either reader alone: the union of the two would demand
+                # a row the build was never given a reason to make.
+                filed[stem] |= {e["authorization"] for e in entries
+                                if e.get("authorization")}
 
     # 3. page citations lie inside the release, and inside the row's own range
     ws = wb["Authorization_Summary"]
@@ -123,12 +128,19 @@ def control(sandbox, xlsx):
     fieldcol = {src: name for name, src in PRIOR if not src.startswith(("@", "-"))}
     for r in rows:
         fn = r[ix["DFO_File_or_PATH"]]
+        # Verdicts are recorded against the document's own key. A row split out
+        # of a letter granting several authorizations is filed under one of the
+        # numbers the letter grants, which is not that key, so asking with the
+        # row's own key would quietly test nothing for two rows in three.
+        keys = {corrected(stem_of(d), file_no_of(d))
+                for d in str(r[ix["Documents"]] or "").split("; ") if d}
         for src, col in fieldcol.items():
             # One reader failing is not a failed cell. The build discards that
             # reader and keeps the other, so the cell holds an answer that did
             # verify. What this looks for is a filled cell with no verified
             # answer behind it at all.
-            if ((fn, src) in rejected and (fn, src) not in verified
+            if (any((k, src) in rejected for k in keys)
+                    and not any((k, src) in verified for k in keys)
                     and r[ix[col]] not in (None, "")):
                 findings.append(("a cell holds a value that failed verification",
                                  f"{fn} {col}"))
@@ -137,17 +149,19 @@ def control(sandbox, xlsx):
     # Keyed by document, not by file number: a merged row spans several
     # documents and each has its own page offset.
     ranges = {o["doc_id"]: o for o in orders}
-    for c in wb["Conditions"].iter_rows(min_row=2, values_only=True):
-        fn, doc_id, num, text, page, src = c[0], c[1], str(c[4]), c[8], c[9], c[10]
+    cs = wb["Conditions"]
+    cix = {c.value: i for i, c in enumerate(cs[1])}
+    for c in cs.iter_rows(min_row=2, values_only=True):
+        fn, doc_id = c[cix["File_Number"]], c[cix["Document"]]
+        num, text = str(c[cix["Number"]]), c[cix["Text"]]
+        page, src = c[cix["Page"]], c[cix["Source"]]
         o = ranges.get(doc_id)
         if not o or not text or not isinstance(page, int):
             continue
         folded = load_pages(o["slice"])
         rel = page - o["first_page"] + 1
-        spread_f = folded.get(rel, ("", set()))[0] + folded.get(rel + 1, ("", set()))[0]
-        spread_t = folded.get(rel, ("", set()))[1] | folded.get(rel + 1, ("", set()))[1]
         checked["conditions in the sheet"] += 1
-        if on_page(text, spread_f, spread_t):
+        if on_cited_page(text, folded, rel):
             continue
         if src == "image":
             checked["conditions read off the scan"] += 1     # not in the text layer by design
@@ -157,13 +171,33 @@ def control(sandbox, xlsx):
 
     # 6. every condition belongs to a row that exists
     known = {r[ix["DFO_File_or_PATH"]] for r in rows}
-    for c in wb["Conditions"].iter_rows(min_row=2, values_only=True):
-        if c[0] not in known:
-            findings.append(("condition belongs to no row in the summary", str(c[0])))
-    return findings, checked, conflicts
+    for c in cs.iter_rows(min_row=2, values_only=True):
+        fn = c[cix["File_Number"]]
+        if fn not in known:
+            findings.append(("condition belongs to no row in the summary", str(fn)))
+
+    # 7. every authorization a letter files figures under has a row of its own
+    #
+    # One row cannot be the record of three authorizations: its area cells would
+    # hold figures from three separate decisions with nothing to say which is
+    # which. Asked of the attribution rather than of how many numbers the letter
+    # prints, because that is what makes the rows separable — a letter naming a
+    # second number it does not sort anything under grants one authorization and
+    # belongs in one row. Read off the readers, because the sheet cannot report a
+    # row it never grew.
+    folded = {norm(k) for k in known}
+    for stem, numbers in filed.items():
+        if len(numbers) < 2:
+            continue
+        checked["letters filing figures under several authorizations"] += 1
+        for n in sorted(numbers):
+            if norm(n) not in folded:
+                findings.append(("an authorization the letter files under has no row",
+                                 f"{stem} {n}"))
+    return findings, checked
 
 
-def assurance(sandbox, xlsx, conflicts):
+def assurance(sandbox, xlsx):
     """What the run did, stated so it can be disputed."""
     orders = json.load(open(f"{sandbox}/wave.json"))
     complete = complete_stems(sandbox)
@@ -334,7 +368,7 @@ def workload(xlsx):
 
 if __name__ == "__main__":
     sandbox, xlsx = sys.argv[1], sys.argv[2]
-    findings, checked, conflicts = control(sandbox, xlsx)
+    findings, checked = control(sandbox, xlsx)
 
     print("QUALITY CONTROL — is every filled cell checkable?\n")
     for k in sorted(checked):
@@ -361,7 +395,7 @@ if __name__ == "__main__":
         print("    none — every condition cross-reference resolves")
 
     print("\n\nQUALITY ASSURANCE — was it produced the way the plan requires?\n")
-    for k, v in assurance(sandbox, xlsx, conflicts).items():
+    for k, v in assurance(sandbox, xlsx).items():
         print(f"    {k:38} {v}")
 
     decisions, notes, kinds = workload(xlsx)

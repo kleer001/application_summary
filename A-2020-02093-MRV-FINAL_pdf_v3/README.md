@@ -70,7 +70,10 @@ going looking. Keep the run directory shallow — `tmp/w1`, not a nested path.
 - The tuning half is partly read; the holdout is untouched.
 - Pass D — the controlled vocabularies — has not run, so `Project_Type` and
   `Aquatic_Setting` are empty by design.
-- `Supporting_Documents` is empty: the segmenter looks for an "issued to" block
-  those documents do not have.
+- `Supporting_Documents` is a finding aid, not extraction. The segmenter cannot
+  reach those documents — it looks for an "issued to" block they do not have — so
+  their titles and page ranges are recorded by hand in `supporting_documents.json`
+  and copied to the sheet unchanged. Each title is quoted from the page cited
+  beside it; nothing else on the sheet is claimed.
 - The earliest documents were read under older versions of the contracts, so
   their conflict rate is not a measurement of the current ones.

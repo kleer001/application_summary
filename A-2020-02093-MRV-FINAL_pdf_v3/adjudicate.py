@@ -78,6 +78,7 @@ def classify(sa, sb, qa=None, qb=None, wa=None, wb=None):
     `wa`/`wb` are the word sets of the same values. They cannot be recovered
     from `sa`/`sb`, which have had their word boundaries folded away, so they are
     built from the raw values by the caller.
+
     """
     if qa and qb and qa == qb and sa != sb:
         return "texture"
@@ -113,10 +114,47 @@ def classify(sa, sb, qa=None, qb=None, wa=None, wb=None):
 
 
 def richer(ea, eb):
-    """The answer carrying more of the document: more entries, then more text."""
+    """The answer carrying more of the document: more entries, then more
+    attribution, then more text.
+
+    Attribution counts before text length because it is the one part of an
+    answer that cannot be recovered later. Where one reader filed a figure under
+    the authorization the document attributes it to and the other only recorded
+    the figure, the first read the page more completely, and dropping to the
+    second loses something no later pass can put back."""
     def weight(entries):
-        return (len(entries), sum(len(str(e.get("value", ""))) for e in entries))
+        return (len(entries),
+                sum(1 for e in entries if e.get("authorization")),
+                sum(len(str(e.get("value", ""))) for e in entries))
     return ea if weight(ea) >= weight(eb) else eb
+
+
+def filed(entries):
+    """Where each value was filed, for the entries that say.
+
+    A letter can grant several numbered authorizations at once and sort its
+    impacts under them by heading. Both sides are folded, so an authorization
+    written two ways is one authorization here as it is everywhere else.
+    """
+    return {norm(e["value"]): norm(e["authorization"]) for e in entries
+            if e.get("authorization") and e.get("value") not in (None, "")}
+
+
+def crossed(aa, ab):
+    """Did the two readers file a value they both attributed differently?
+
+    Only values both of them attributed can disagree. A reader who attributed
+    four of the five figures the other did has said less, not something else,
+    and that is a lapse for the rules below to settle rather than a contradiction.
+
+    This is asked before `classify`, and separately from it, because every rule
+    in there compares what was quoted. Which authorization a figure belongs to is
+    not in its quote — it is the heading the figure sits under — so two readers
+    can cite one passage word for word and still have filed it against different
+    authorizations. Left to `classify` that is texture, settled with no
+    adjudicator: the swapped-pairings risk noted there, arriving by another road.
+    """
+    return any(aa[v] != ab[v] for v in aa.keys() & ab.keys())
 
 
 def adjudicate(ea, eb):
@@ -136,10 +174,15 @@ def adjudicate(ea, eb):
                        if e.get("value") not in (None, "")] or [set()])
     wb = set().union(*[wordset(e["value"]) for e in eb
                        if e.get("value") not in (None, "")] or [set()])
+    aa, ab = filed(ea), filed(eb)
+    if crossed(aa, ab):
+        return [], "conflict", f"the same figure filed against different authorizations"
     verdict = classify(sa, sb, qa, qb, wa, wb)
 
     if verdict == "agree":
-        return (ea or eb), "agree", None
+        # Equal values can still differ in where they were filed, and only one
+        # side may have said. `richer` prefers the reader who did.
+        return (richer(ea, eb) if aa or ab else (ea or eb)), "agree", None
     if verdict == "texture":
         why = ("both readers cited the same passages" if qa and qa == qb
                else "same passage, quoted to different lengths")

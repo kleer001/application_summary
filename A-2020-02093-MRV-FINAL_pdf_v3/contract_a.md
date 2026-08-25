@@ -143,6 +143,33 @@ anywhere except inside an entry.
 - **`role`: `"total"`** marks a figure the document itself presents as the sum of
   the others. Never add figures up yourself to produce one. Without a stated
   total there is simply no entry carrying that role.
+- **`authorization`: a file number** marks which authorization an entry belongs
+  to, and is required whenever the document grants **more than one** and sorts
+  what follows under them. Such a letter stacks its numbers under a single
+  `PATH No.:` and then heads each part of the description with the number it
+  belongs to:
+
+  > `PATH No.: 19-HCAA-01437`
+  > `19-HCAA-01675`
+  >
+  > `19-HCAA-01437 (Mullet Creek Re-alignment):`
+  > `• ... permanent alteration of 1,724 m² of fish habitat`
+  >
+  > `19-HCAA-01675 (Credit River Bridge Replacement):`
+  > `• ... permanent destruction of ~578 m²`
+
+  The `1,724` entry carries `"authorization": "19-HCAA-01437"` and the `578`
+  entry `"authorization": "19-HCAA-01675"`. Each authorization becomes its own
+  row, so an entry filed under the wrong one puts a figure against a regulatory
+  decision that did not make it.
+
+  This is the one attribute you take from where the text sits rather than from
+  the text itself: the heading is not part of the quote, and no mechanical check
+  can confirm it. That is why it is checked the way everything else here is
+  checked — by the other reader having read the same page independently. Attribute
+  from the nearest heading above the figure, and where a document names one
+  authorization only, or names several without sorting anything under them, leave
+  the attribute off entirely.
 - `value` is the answer as the document gives it. `quote` is the text you read it
   from. `page` is the `=== page N ===` number that quote appears on — pages are
   numbered from 1 and the PDF beside the excerpt holds the same pages in the same

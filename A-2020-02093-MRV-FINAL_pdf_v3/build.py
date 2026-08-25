@@ -1,7 +1,8 @@
 """Assemble the workbook from verified reader output.
 
-One row per file number. Every text cell is a verbatim quote and every row cites
-the pages it came from, so any value can be checked against the page that carries
+One row per authorization — usually one per file number, and one per number a
+letter grants where it grants several. Every text cell is a verbatim quote and
+every row cites the pages it came from, so any value can be checked against the page that carries
 it. Nothing is copied from the prior summary; cells this run cannot support are
 left empty and the reason is on the Review_Queue.
 """
@@ -13,6 +14,8 @@ from ids import corrected, file_no_of, stem_of
 from norm import norm
 from paths import complete_stems
 from verify import VERIFIED, check_conditions, check_field, load_pages, verdicts_for
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The prior summary's 30 columns, in its order, each naming what fills it.
 # A field name reads that field; "@" runs the derivation of that name below;
@@ -332,7 +335,7 @@ def _amendment_dates(row):
     return out
 
 
-def _qa_flag(row, queue_by_fn):
+def _qa_flag(row, queue_by_fn, *_):
     flags = []
     if not any(row["fields"].get(n) for n in
                ("hadd_destruction_m2", "hadd_alteration_m2", "total_impact_area_m2")):
@@ -344,7 +347,7 @@ def _qa_flag(row, queue_by_fn):
     return "; ".join(flags) or None
 
 
-def _monitoring(row, _):
+def _monitoring(row, *_):
     parts = [cell(row["fields"].get("monitoring_duration") or []),
              cell(row["fields"].get("monitoring_frequency") or [])]
     got = [c for c in row["conditions"] if c.get("topic") in ("monitoring", "reporting")]
@@ -354,7 +357,7 @@ def _monitoring(row, _):
     return "; ".join(parts) + INFERRED if parts else None
 
 
-def _impact_summary(row, _):
+def _impact_summary(row, *_):
     bits = [cell(row["fields"].get("project_description") or [])]
     for name, word in (("hadd_destruction_m2", "destruction"),
                        ("hadd_alteration_m2", "alteration"),
@@ -366,7 +369,7 @@ def _impact_summary(row, _):
     return "; ".join(bits) + INFERRED if bits else None
 
 
-def _offsetting_unit(row, _):
+def _offsetting_unit(row, *_):
     text = " ".join(str(cell(row["fields"].get(n) or [])) for n in
                     ("offsetting_required_amount", "offsetting_provided_amount"))
     units = {u.replace("²", "2") for u in
@@ -374,22 +377,38 @@ def _offsetting_unit(row, _):
     return "; ".join(sorted(units)) + INFERRED if units else None
 
 
-def _page_anchor(row, _):
+def _page_anchor(row, *_):
     pages = [e.get("page") for f in row["fields"].values() for e in f
              if isinstance(e.get("page"), int)]
     return f"pp. {min(pages)}-{max(pages)}" if pages else None
 
 
+def _setting(row, _, labels):
+    return label_cell(labels.get("setting"))
+
+
+def _project_type(row, _, labels):
+    """The prior column reads "activity / sector"; both halves are labels."""
+    act, sec = labels.get("activity"), labels.get("sector")
+    if not act and not sec:
+        return None
+    left = "; ".join(act) if act else ""
+    right = "; ".join(sec) if sec else ""
+    return (f"{left} / {right}" if left and right else left or right) + INFERRED
+
+
 DERIVED = {
-    "@issue_year": lambda row, _: (_issue_date(row) or "")[:4] or None,
-    "@amendment_date": lambda row, _: "; ".join(_amendment_dates(row)) or None,
-    "@amendment_year": lambda row, _: "; ".join(sorted({d[:4] for d in _amendment_dates(row)})) or None,
+    "@setting": _setting,
+    "@project_type": _project_type,
+    "@issue_year": lambda row, *_: (_issue_date(row) or "")[:4] or None,
+    "@amendment_date": lambda row, *_: "; ".join(_amendment_dates(row)) or None,
+    "@amendment_year": lambda row, *_: "; ".join(sorted({d[:4] for d in _amendment_dates(row)})) or None,
     # Yes exactly when the authorization issued in 2021. All 96 decided rows of
     # the prior summary follow this rule and none contradict it; where no issue
     # date was extracted the rule has no input and the cell stays empty.
-    "@include_2021": lambda row, _: (None if not _issue_date(row)
-                                     else ("Yes" if _issue_date(row).startswith("2021") else "No")),
-    "@contingency": lambda row, _: (
+    "@include_2021": lambda row, *_: (None if not _issue_date(row)
+                                      else ("Yes" if _issue_date(row).startswith("2021") else "No")),
+    "@contingency": lambda row, *_: (
         f"{len([c for c in row['conditions'] if c.get('topic') == 'contingency'])} "
         f"on the Conditions sheet" + INFERRED
         if any(c.get("topic") == "contingency" for c in row["conditions"]) else None),
@@ -411,19 +430,71 @@ def label_cell(terms):
 
 
 def derive(row, key, queue_by_fn, row_labels):
-    if key == "@setting":
-        return label_cell(row_labels.get("setting"))
-    if key == "@project_type":
-        # The prior column reads "activity / sector"; both halves are labels.
-        act, sec = row_labels.get("activity"), row_labels.get("sector")
-        if not act and not sec:
-            return None
-        left = "; ".join(act) if act else ""
-        right = "; ".join(sec) if sec else ""
-        return (f"{left} / {right}" if left and right else left or right) + INFERRED
     if key not in DERIVED:
         raise KeyError(f"{key} appears in PRIOR but nothing derives it")
-    return DERIVED[key](row, queue_by_fn)
+    return DERIVED[key](row, queue_by_fn, row_labels)
+
+
+def split_by_authorization(row):
+    """One row per authorization, where a letter grants more than one.
+
+    A single letter can grant several numbered authorizations at once, and where
+    it does it says under its own headings which impacts belong to which. One row
+    holding all of them is a record of no authorization: its area cells carry
+    figures from several separate regulatory decisions with nothing to say which
+    decision each belongs to, and a reader of the sheet cannot recover it.
+
+    A field whose entries carry no attribution is stated once for the whole
+    letter — the proponent, the project, the dates — and is repeated on each row
+    unchanged. An entry left unattributed in a field where others were attributed
+    is repeated too, rather than dropped: the reader did not say where it goes,
+    and showing it on every row states that plainly where discarding it would
+    hide it.
+
+    What triggers the split is the **attribution**, not how many numbers the
+    letter prints. A letter naming several and sorting nothing under them — an
+    amendment citing the authorization it amends, a form carrying a related file
+    number — grants one authorization, and splitting it would turn one honest
+    pooled row into several rows each falsely claiming all of the figures.
+    """
+    # Folded to compare, kept as printed to write: the fold exists to match
+    # identifiers through OCR damage, never to put one in a cell.
+    filed = {}
+    for entries in row["fields"].values():
+        for e in entries:
+            if e.get("authorization"):
+                filed.setdefault(norm(e["authorization"]), e["authorization"])
+    if len(filed) < 2:
+        return [row]
+    out = []
+    for where, printed in filed.items():
+        fields = {}
+        for name, entries in row["fields"].items():
+            if name == "file_number":
+                fields[name] = [e for e in entries if norm(e.get("value")) == where]
+            else:
+                fields[name] = [e for e in entries
+                                if not e.get("authorization")
+                                or norm(e["authorization"]) == where]
+        out.append({**row, "fields": fields, "authorization": printed})
+    return out
+
+
+def row_key(row):
+    """What the row is filed under. Its own authorization where it has one."""
+    return row.get("authorization") or row["documents"][0]["file_number"]
+
+
+def by_document(rows):
+    """The rows, one per set of documents.
+
+    Several rows can share one document, because a letter granting several
+    authorizations produces a row for each. Anything counted or written per
+    document rather than per row has to come through here, or a count the
+    document states once is reported several times.
+    """
+    return list({tuple(d["doc_id"] for d in r["documents"]): r
+                 for r in rows}.values())
 
 
 # ------------------------------------------------------------------- assembly
@@ -448,8 +519,9 @@ def assemble(sandbox):
     by_fn = defaultdict(list)
     for d in docs:
         by_fn[d["file_number"]].append(d)
-    rows = sorted((merge_documents(v, discrepancies) for v in by_fn.values()),
-                  key=lambda r: r["documents"][0]["file_number"])
+    rows = sorted((r for v in by_fn.values()
+                   for r in split_by_authorization(merge_documents(v, discrepancies))),
+                  key=row_key)
     return rows, docs, queue, discrepancies
 
 
@@ -462,11 +534,14 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
     from openpyxl.styles import Font
 
     labelled = labelled or {}
+    docrows = by_document(rows)
     used = {src for _, src in PRIOR if not src.startswith(("@", "-"))}
     extended = [n for n in spec if n not in used]
     queue_by_fn = defaultdict(list)
     for q in queue:
         queue_by_fn[q["file_number"]].append(q)
+
+    conditions = sum(len(r["conditions"]) for r in docrows)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -494,7 +569,11 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
     cs = wb.create_sheet("Conditions")
     cs.append(["File_Number", "Document", "Section", "Section_Title", "Number",
                "Parent", "Topic", "Deadline", "Text", "Page", "Source"])
-    for row in rows:
+    # Once per document, not once per row. A letter granting three
+    # authorizations states one set of conditions governing all of them, so
+    # writing them per row would print each condition three times and treble a
+    # count the document does not treble.
+    for row in docrows:
         for c in row["conditions"]:
             num = str(c.get("number") or "")
             cs.append([row["documents"][0]["file_number"], c.get("document"),
@@ -527,14 +606,20 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
         ps.append([q["file_number"], q["document"], q["field"], q["why"],
                    "rule" if q["resolved"] else "note"])
 
-    wb.create_sheet("Supporting_Documents").append(
-        ["Source_Part", "Related_Authorization", "Proponent", "Document_Type", "Notes"])
+    # The release also carries offsetting plans and assessments that no
+    # authorization page range covers. They are a finding aid, not extraction:
+    # the title is quoted from the page named beside it, and nothing on this
+    # sheet is read by a reader or fed to any other sheet.
+    sd = wb.create_sheet("Supporting_Documents")
+    sd.append(["Title", "Title_Page", "Page_Start", "Page_End", "Notes"])
+    for d in json.load(open(os.path.join(HERE, "supporting_documents.json"))):
+        sd.append([d["title"], d["title_page"], d["first"], d["last"], d["notes"]])
 
     ov = wb.create_sheet("Overview")
     ov.append(["Metric", "Value"])
     for k, v in [("Rows in Authorization_Summary", len(rows)),
                  ("Documents read", len(docs)),
-                 ("Numbered conditions", sum(len(r["conditions"]) for r in rows)),
+                 ("Numbered conditions", conditions),
                  ("Decisions a person owes", sum(1 for q in queue if q.get("kind") == DECISION)),
                  ("Notes worth knowing", sum(1 for q in queue
                                              if q.get("kind") == NOTE and not q["resolved"])),
@@ -568,6 +653,9 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
             width = max((len(str(c.value)) for c in col[:60] if c.value is not None), default=8)
             sheet.column_dimensions[col[0].column_letter].width = min(max(width + 2, 10), 52)
     wb.save(out_path)
+    # Returned rather than recomputed by the caller: the sheet and the number
+    # reported for it have to come from the same count.
+    return conditions
 
 
 DECISION, NOTE = "decision", "note"
@@ -622,13 +710,14 @@ def open_conflicts(sandbox):
 def build(sandbox, out_path):
     rows, docs, queue, discrepancies, _ = open_conflicts(sandbox)
     spec = list(json.load(open(f"{sandbox}/fields.json")))
-    write_workbook(rows, docs, queue, discrepancies, spec, out_path, labels(sandbox))
+    conditions = write_workbook(rows, docs, queue, discrepancies, spec, out_path,
+                                labels(sandbox))
     return {"rows": len(rows), "documents": len(docs),
             "decisions": sum(1 for q in queue if q.get("kind") == DECISION),
             "notes": sum(1 for q in queue if q.get("kind") == NOTE and not q["resolved"]),
             "auto_resolved": sum(1 for q in queue if q["resolved"]),
             "discrepancies": len(discrepancies),
-            "conditions": sum(len(r["conditions"]) for r in rows)}
+            "conditions": conditions}
 
 
 if __name__ == "__main__":
