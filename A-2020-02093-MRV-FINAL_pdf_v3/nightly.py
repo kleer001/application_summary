@@ -111,6 +111,7 @@ if __name__ == "__main__":
             print(f"{len(older)} of the {done} answered under an earlier contract "
                   f"(advisory — not selected for re-reading)")
         print(f"documents this run: {cfg['documents_per_night']}")
+        print(f"rounds this night: {cfg['rounds_per_night']}")
         sys.exit(FINISHED if not left else 0)
 
     if not left:

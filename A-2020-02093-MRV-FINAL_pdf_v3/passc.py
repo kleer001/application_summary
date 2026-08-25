@@ -215,12 +215,22 @@ def write_brief(sandbox, c, stem, order, name, kind):
 if __name__ == "__main__":
     sandbox = sys.argv[1]
     picked, other, stale = outstanding(sandbox)
-    cap = json.load(open(CONFIG))["adjudications_per_night"]
+    cfg = json.load(open(CONFIG))
+    cap, width = cfg["adjudications_per_night"], cfg["concurrent_reads"]
+    tonight = picked[:cap]
+    # Batched for the same reason the reads are: adjudicators are subagents on
+    # the same concurrency ceiling, and a batch dispatched on top of a running
+    # one has its excess rejected rather than queued. The lines are independent
+    # of each other, so this splits anywhere, unlike a document's reads.
+    groups = [tonight[i:i + width] for i in range(0, len(tonight), width)]
     print(f"# {len(picked)} adjudications outstanding "
           f"({stale} resting on a read taken under an earlier contract); "
           f"{other} queue entries are a different job and are not listed")
-    for args in picked[:cap]:
-        print("\t".join(write_brief(sandbox, *args)))
+    print(f"# {len(tonight)} to settle tonight in {len(groups)} batch(es)")
+    for n, group in enumerate(groups, 1):
+        print(f"# batch {n} of {len(groups)} — {len(group)} adjudications")
+        for args in group:
+            print("\t".join(write_brief(sandbox, *args)))
     # On the full count, not the capped one: a cap of zero is a night that
     # adjudicates nothing, not a corpus with nothing left to adjudicate.
     sys.exit(NONE_OUTSTANDING if not picked else 0)

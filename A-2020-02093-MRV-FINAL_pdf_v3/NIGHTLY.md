@@ -124,19 +124,23 @@ python3 A-2020-02093-MRV-FINAL_pdf_v3/passc.py A-2020-02093-MRV-FINAL_pdf_v3/run
 ```
 
 Both exit 3 when they have nothing outstanding. If either does, there is nothing
-to adjudicate tonight: go to step 5 if reads landed, or finish as described in
-step 1 if none did. Neither builds the workbook and neither needs anything but the
+to adjudicate this round: go to step 5 if reads landed, or on to step 7 if none
+did. Neither builds the workbook and neither needs anything but the
 standard library.
 
-`passc.py` prints one line per adjudication, capped by `adjudications_per_night`,
-tab-separated:
+`passc.py` prints one line per adjudication, capped by `adjudications_per_night`
+and divided into batches by `# batch N of M` lines, tab-separated:
 
 ```
 stem <TAB> field <TAB> model <TAB> brief <TAB> fields <TAB> slice <TAB> pdf <TAB> out
 ```
 
-Spawn one `page-reader` subagent per line, on the model in column 3, and hand it
-exactly this:
+Spawn one `page-reader` subagent per line, on the model in column 3. **Launch
+every adjudicator in a batch together, wait until all of them have replied, then
+start the next batch** — adjudicators are subagents on the same capped
+concurrency as the readers, and a batch dispatched on top of a running one has
+its excess rejected rather than queued, so those adjudications simply never write
+a file. Hand each one exactly this:
 
 ```
 Settle one open question about an authorization document.
@@ -197,11 +201,29 @@ git push origin HEAD:main
 If that push is rejected as non-fast-forward, the checkout was behind the remote.
 Report it and stop; do not merge, rebase or force.
 
-## 7. Report
+## 7. Go round again
 
-One short paragraph: how many reads landed, how many adjudications were settled,
-how many remain, and anything that failed. Do not restate what the documents
-said and do not report what any adjudicator decided.
+A night is more than one round of this procedure. `nightly.py --status` prints
+`rounds this night`; you have just finished one. **If rounds remain, go back to
+step 1 and work through to here again.** Skip step 0 — the scans are already
+readable — and leave the report until the last round is done, since it covers the
+night rather than the round.
+
+Selection is arithmetic over the filesystem: a read appears in the work order
+only while its output file does not exist, and a conflict only while no ruling
+for it exists. So the next round picks up the next documents and the next
+conflicts with no bookkeeping, and a round that read nothing means the corpus is
+finished — stop and report rather than looping.
+
+The round, not the night, is what survives. Each one commits and pushes before
+the next begins, so a night that dies in its second round keeps its first.
+
+## 8. Report
+
+Once, after the last round. One short paragraph covering the night as a whole:
+how many reads landed, how many adjudications were settled, how many remain, and
+anything that failed — naming the round it failed in. Do not restate what the
+documents said and do not report what any adjudicator decided.
 
 ## What not to do
 
@@ -212,5 +234,5 @@ said and do not report what any adjudicator decided.
   half that writes a spreadsheet.
 - Do not open the prior summary workbook. It is a test set, and nothing but
   `score.py` may read it.
-- Do not raise `documents_per_night` or `adjudications_per_night` in `nightly.json`
-  on your own initiative.
+- Do not raise `documents_per_night`, `rounds_per_night` or
+  `adjudications_per_night` in `nightly.json` on your own initiative.
