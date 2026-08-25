@@ -32,10 +32,7 @@ MODEL_RX = re.compile(r'"model":"(claude-[a-z0-9.-]+)"')
 
 def scan(path):
     """Total tokens in one transcript, and the model that dominates it."""
-    try:
-        text = open(path, encoding="utf-8", errors="replace").read()
-    except OSError:
-        return 0, None
+    text = open(path, encoding="utf-8", errors="replace").read()
     total = sum(sum(int(g) for g in m.groups()) for m in USAGE_RX.finditer(text))
     models = MODEL_RX.findall(text)
     top = max(set(models), key=models.count) if models else None
