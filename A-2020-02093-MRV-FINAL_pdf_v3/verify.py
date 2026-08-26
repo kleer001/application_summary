@@ -15,6 +15,7 @@ without the digits being compared.
 """
 import functools, json, re, sys
 from collections import Counter
+from typing import NamedTuple
 
 from norm import norm, on_page, tokens
 
@@ -28,13 +29,112 @@ VERIFIED = ("pass", "QUEUE")
 FAILED = ("REJECT", "MALFORMED")
 
 
+# How far in from a page edge furniture can reach. Only a run of furniture
+# unbroken from the edge is stripped, so looking too far costs nothing: the first
+# line of real text stops the walk.
+EDGE = 6
+
+
+class Page(NamedTuple):
+    """One page, folded once, in the three shapes the checks ask for.
+
+    `folded` and `tokens` are the whole page and are what a citation to this page
+    is tested against. The other two are the page with its furniture removed, and
+    exist only to join two pages at a break: `without_footer` where this page is
+    the first half of the seam, `without_header` where it is the second.
+    """
+    folded: str
+    tokens: set
+    without_footer: str
+    without_header: str
+
+
+def shape(line):
+    """A line with every number standing for any number.
+
+    Furniture is not a phrase to match. A Bates stamp, a page number, a margin
+    column of section numbers and a file-number header differ page to page in
+    their digits and in nothing else, so the digits are what has to go before the
+    lines can be seen to be the same line.
+    """
+    return re.sub(r"[^a-z#]+", "", re.sub(r"\d+", "#", line.lower()))
+
+
+def only_numbers(sh):
+    """A line that is a number and nothing else.
+
+    A Bates stamp, a page number and the margin column of section numbers the
+    scanner reads before the prose all fold to this. None of them is prose, and
+    at a page edge none of them is ever part of a requirement's own text.
+
+    Not decided by recurrence, because the margin column is not a running
+    header: it appears on the pages whose numbering happens to spill and on no
+    others, which is too few pages to recur and is still furniture.
+    """
+    return bool(sh) and set(sh) == {"#"}
+
+
+def furniture(pages):
+    """The shapes that recur at the top and at the bottom of this document.
+
+    Found by recurrence rather than by pattern, so the press's own furniture is
+    caught whatever it is and nothing has to be named. A shape counts as
+    furniture when it sits at the same edge of at least a third of the pages, and
+    of at least two: one page's habit is not a running header.
+
+    Counted per page, not per line, so that many copies of one shape on a single
+    page cannot vote themselves into the set.
+
+    A redaction marker — `s.19(1)`, `s.20(1)(b)` — is deliberately not caught.
+    It carries letters, so it needs recurrence, and it is stamped where content
+    was withheld rather than on every page, so it does not recur. That is the
+    wanted answer and not a gap: the marker exists to say something was removed,
+    and joining two pages across one would assert a continuity the document
+    itself denies. A condition that straddles a redaction belongs in the queue.
+    """
+    heads, tails = Counter(), Counter()
+    for lines in pages.values():
+        heads.update({shape(l) for l in lines[:EDGE] if shape(l)})
+        tails.update({shape(l) for l in lines[-EDGE:] if shape(l)})
+    floor = max(2, -(-len(pages) // 3))
+    return ({k for k, n in heads.items() if n >= floor},
+            {k for k, n in tails.items() if n >= floor})
+
+
+def strip_edges(lines, head_shapes, tail_shapes):
+    """The page's body: the run of furniture at each edge walked off."""
+    def furn(line, shapes):
+        sh = shape(line)
+        return sh in shapes or only_numbers(sh)
+
+    i, j = 0, len(lines)
+    while i < j and furn(lines[i], head_shapes):
+        i += 1
+    while j > i and furn(lines[j - 1], tail_shapes):
+        j -= 1
+    return lines[i:j]
+
+
 @functools.lru_cache(maxsize=8)
 def load_pages(slice_path):
     """Page number to text, and to folded text, folded once per document."""
     text = open(slice_path, encoding="utf-8").read()
     pages = {int(m.group(1)): m.group(2) for m in
              re.finditer(r"=== page (\d+) ===\n(.*?)(?=\n\n=== page |\Z)", text, re.S)}
-    return {p: (norm(t), set(tokens(t))) for p, t in pages.items()}
+    lines = {p: [l for l in t.split("\n") if l.strip()] for p, t in pages.items()}
+    head_shapes, tail_shapes = furniture(lines)
+    # Each edge is walked off on its own: a page is the first half of one seam
+    # and the second half of another, and in each role it keeps the edge that is
+    # not the seam.
+    return {p: Page(norm(t), set(tokens(t)),
+                    norm("".join(strip_edges(lines[p], set(), tail_shapes))),
+                    norm("".join(strip_edges(lines[p], head_shapes, set()))))
+            for p, t in pages.items()}
+
+
+def page_of(folded, pg):
+    """The page, or an empty one where the document has no such page."""
+    return folded.get(pg) or Page("", set(), "", "")
 
 
 def digits_present(value, quote):
@@ -81,7 +181,7 @@ def check_field(name, f, folded, n):
             bad.append(f"[{i}] value with no quote")
         elif not isinstance(pg, int) or not (1 <= pg <= n):
             bad.append(f"[{i}] page {pg} outside 1-{n}")
-        elif not (how := on_page(q, *folded.get(pg, ("", set())))):
+        elif not (how := on_page(q, *page_of(folded, pg)[:2])):
             # A quote marked `image` is a claim that the text layer does not
             # carry it. Finding the same words on another page of that layer does
             # not refute the claim — a short phrase like a job title recurs, and
@@ -90,7 +190,7 @@ def check_field(name, f, folded, n):
             # that says it came from the text.
             nq = norm(q)
             hit = (None if e.get("source") == "image" else
-                   next((p for p, (ft, _) in folded.items() if nq in ft), None))
+                   next((p for p, pf in folded.items() if nq in pf.folded), None))
             if hit:
                 bad.append(f"[{i}] quote is on page {hit}, cited {pg}")
             elif e.get("source") == "image":
@@ -139,10 +239,17 @@ def on_cited_page(text, folded, pg):
     conditions that failed their own page and passed the two-page test, two
     crossed the seam and forty cleared the bar only on the doubled pool — a page
     citation established by nothing but the neighbouring page's vocabulary.
+
+    The two halves are joined body to body, because what sits between them on the
+    page is not prose: the foot of one page carries a page number and a Bates
+    stamp, and the head of the next carries a running file-number header and the
+    margin column of section numbers the scanner reads before the text. A
+    sentence broken across the seam does not survive having them spliced into its
+    middle. Each page keeps the edge that is not the seam, so a citation to a
+    page is still tested against that page whole.
     """
-    here = folded.get(pg, ("", set()))
-    joined = here[0] + folded.get(pg + 1, ("", set()))[0]
-    return on_page(text, joined, here[1])
+    here, nxt = page_of(folded, pg), page_of(folded, pg + 1)
+    return on_page(text, here.without_footer + nxt.without_header, here.tokens)
 
 
 def check_conditions(doc, slice_path):
