@@ -3,6 +3,8 @@
 !A-2021-00215_CBL_pdf/*.pdf
 !AOR-2026-00383_pdf/*.pdf
 !emr-placer-guidebook-mitigation-measures_pdf/*.pdf
+# The delivered explainer. It is the artefact, not a source scan.
+!delivery_2026_08_26/*.pdf
 # Staged per-document pages. Derived from the release, but the only copy a
 # cloud run can see, so they are tracked deliberately.
 !A-2020-02093-MRV-FINAL_pdf_v3/staged/pages/*.pdf
