@@ -124,6 +124,21 @@ def control(sandbox, xlsx):
                 findings.append(("a quoted cell is marked as reasoned", name))
             checked["cells"] += 1
 
+    # The extended fields moved to their own sheet, and the count of checkable
+    # cells has to move with them. Nothing there is derived except the identifier,
+    # which carries the marker when the build had to infer it.
+    es = wb["Extended_Fields"]
+    ehdr = [c.value for c in es[1]]
+    erows = list(es.iter_rows(min_row=2, values_only=True))
+    for r in erows:
+        for name, cell in zip(ehdr, r):
+            if cell in (None, ""):
+                continue
+            marked = str(cell).rstrip().endswith(INFERRED.strip())
+            if marked and name != "DFO_File_or_PATH":
+                findings.append(("a quoted cell is marked as reasoned", name))
+            checked["cells"] += 1
+
     # 5. a value that failed verification never reached a cell
     fieldcol = {src: name for name, src in PRIOR if not src.startswith(("@", "-"))}
     # The identifier column is derived so that a row is never nameless, but where
@@ -153,6 +168,23 @@ def control(sandbox, xlsx):
                     and value not in (None, "")):
                 findings.append(("a cell holds a value that failed verification",
                                  f"{fn} {col}"))
+    # The same question of the sheet next door. Its column names are the field
+    # names, so no mapping is needed -- and these were never covered while they
+    # sat in the summary, because that check only ever walked the prior layout.
+    efields = [h for h in ehdr if h not in ("DFO_File_or_PATH", "Documents")]
+    for r in erows:
+        d = dict(zip(ehdr, r))
+        keys = {corrected(stem_of(x), file_no_of(x))
+                for x in str(d.get("Documents") or "").split("; ") if x}
+        for src in efields:
+            value = d.get(src)
+            if value in (None, "") or str(value).rstrip().endswith(INFERRED.strip()):
+                continue
+            if (any((k, src) in rejected for k in keys)
+                    and not any((k, src) in verified for k in keys)):
+                findings.append(("a cell holds a value that failed verification",
+                                 f"{d.get('DFO_File_or_PATH')} {src}"))
+
     # Check the text the workbook actually carries, not the readers' drafts of it:
     # pass C may have replaced a condition whose reader copy the OCR defeated.
     # Keyed by document, not by file number: a merged row spans several

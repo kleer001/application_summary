@@ -597,7 +597,11 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Authorization_Summary"
-    ws.append([name for name, _ in PRIOR] + extended
+    # The prior summary's own layout and nothing else. This is the sheet somebody
+    # holds against the workbook they handed over, so it has the shape they handed
+    # over: their thirty columns, and the four that say where a row came from.
+    # Fields this rebuild reads that their layout has no column for go next door.
+    ws.append([name for name, _ in PRIOR]
               + [v.replace("_", " ").title().replace(" ", "_") for v in VOCABULARIES]
               + ["Documents", "Language", "Page_Start", "Page_End"])
     for row in rows:
@@ -607,7 +611,6 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
                 (derive(row, src, queue_by_fn, row_labels) if src.startswith("@")
                  else cell(row["fields"].get(src) or []))
                 for _, src in PRIOR]
-        line += [cell(row["fields"].get(n) or []) for n in extended]
         line += [label_cell(row_labels.get(v)) for v in VOCABULARIES]
         # The documents are ordered original-then-amendment, which is not page
         # order; a merged row's range is the span of all of them.
@@ -616,6 +619,21 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
                  min(d["first"] for d in row["documents"]),
                  max(d["last"] for d in row["documents"])]
         ws.append(line)
+
+    # Everything read from the documents that the prior layout has no column for.
+    # A separate sheet rather than a wider one: these are real verified values and
+    # throwing them away would be worse, but a reader comparing the rebuild against
+    # what they were handed should not have to find thirty familiar columns among
+    # fifty-seven. Keyed on the same identifier the summary uses -- the same
+    # derivation, so an inferred name matches an inferred name -- and carrying
+    # Documents, because every check that asks what verified a cell asks per
+    # document.
+    es = wb.create_sheet("Extended_Fields", 1)
+    es.append(["DFO_File_or_PATH"] + extended + ["Documents"])
+    for row in rows:
+        es.append([_file_number(row)]
+                  + [cell(row["fields"].get(n) or []) for n in extended]
+                  + ["; ".join(d["doc_id"] for d in row["documents"])])
 
     cs = wb.create_sheet("Conditions")
     cs.append(["File_Number", "Document", "Section", "Section_Title", "Number",

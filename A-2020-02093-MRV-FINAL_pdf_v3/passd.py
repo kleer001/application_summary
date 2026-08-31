@@ -86,14 +86,39 @@ def terms_for(name):
 
 
 def rows_from(xlsx):
+    """One dict per row, from both sheets that hold a row's values.
+
+    Five of the values a labeller is shown -- waterbody, coordinates, the habitat
+    impact activities, the species-at-risk finding and whether a letter of credit
+    is required -- live on Extended_Fields, because the prior layout has no column
+    for them. Joined on the identifier the two sheets share. Reading only the
+    summary would not fail: `column in header` would simply be false and a
+    labeller would be handed None for five fields out of ten and label against
+    what was left.
+    """
     import openpyxl
-    ws = openpyxl.load_workbook(xlsx, data_only=True)["Authorization_Summary"]
+    wb = openpyxl.load_workbook(xlsx, data_only=True)
+    ws = wb["Authorization_Summary"]
     header = [c.value for c in ws[1]]
+
+    extended = {}
+    if "Extended_Fields" in wb.sheetnames:
+        es = wb["Extended_Fields"]
+        ehdr = [c.value for c in es[1]]
+        for r in es.iter_rows(min_row=2, values_only=True):
+            d = dict(zip(ehdr, r))
+            if d.get("DFO_File_or_PATH"):
+                extended[d["DFO_File_or_PATH"]] = d
+
     out = []
     for r in ws.iter_rows(min_row=2, values_only=True):
+        base = dict(zip(header, r))
+        # The summary wins where both carry a name: DFO_File_or_PATH and
+        # Documents are on both sheets and are the join, not two answers.
+        merged = {**extended.get(base.get("DFO_File_or_PATH"), {}), **base}
         row = {}
         for field, column in SHOWN.items():
-            v = r[header.index(column)] if column in header else None
+            v = merged.get(column)
             if v not in (None, ""):
                 row[field] = str(v)
         if row.get("file_number"):
