@@ -203,9 +203,14 @@ you just made straight to the remote branch:
 
 ```
 git add A-2020-02093-MRV-FINAL_pdf_v3/run2
-git commit -m "read <n> documents, settled <m> conflicts"
+git commit -m "read <n> documents (<r> reads), settled <m> conflicts"
 git push origin HEAD:main
 ```
+
+`<n>` is documents and `<r>` is reads, and they are not the same number: eight
+documents is thirty-two reads, because each document is read four times. Every
+night from 27 to 31 August logged "read 32 documents" when it had read eight, so
+the history says the corpus was read four times over.
 
 If that push is rejected as non-fast-forward, the checkout was behind the remote.
 Report it and stop; do not merge, rebase or force.
