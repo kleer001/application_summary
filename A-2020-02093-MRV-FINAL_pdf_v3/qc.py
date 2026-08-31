@@ -126,6 +126,12 @@ def control(sandbox, xlsx):
 
     # 5. a value that failed verification never reached a cell
     fieldcol = {src: name for name, src in PRIOR if not src.startswith(("@", "-"))}
+    # The identifier column is derived so that a row is never nameless, but where
+    # it holds the quoted field it is still that field and still has to answer
+    # for it. Marking it derived must not buy the one column the whole row hangs
+    # on an exemption from the check below; only the inferred fallback is exempt,
+    # and it says so in the cell.
+    fieldcol.setdefault("file_number", "DFO_File_or_PATH")
     for r in rows:
         fn = r[ix["DFO_File_or_PATH"]]
         # Verdicts are recorded against the document's own key. A row split out
@@ -139,9 +145,12 @@ def control(sandbox, xlsx):
             # reader and keeps the other, so the cell holds an answer that did
             # verify. What this looks for is a filled cell with no verified
             # answer behind it at all.
+            value = r[ix[col]]
+            if str(value).rstrip().endswith(INFERRED.strip()):
+                continue                      # reasoned, and says so
             if (any((k, src) in rejected for k in keys)
                     and not any((k, src) in verified for k in keys)
-                    and r[ix[col]] not in (None, "")):
+                    and value not in (None, "")):
                 findings.append(("a cell holds a value that failed verification",
                                  f"{fn} {col}"))
     # Check the text the workbook actually carries, not the readers' drafts of it:
@@ -170,7 +179,12 @@ def control(sandbox, xlsx):
                          f"{fn} {num} p{page}"))
 
     # 6. every condition belongs to a row that exists
-    known = {r[ix["DFO_File_or_PATH"]] for r in rows}
+    # An identifier the build had to infer carries the project's inferred
+    # marker; the Conditions sheet keys on the bare file number. Compare the
+    # identity, not the marker, or a row that names itself still orphans its
+    # conditions.
+    known = {str(r[ix["DFO_File_or_PATH"]]).removesuffix(INFERRED)
+             for r in rows if r[ix["DFO_File_or_PATH"]]}
     for c in cs.iter_rows(min_row=2, values_only=True):
         fn = c[cix["File_Number"]]
         if fn not in known:

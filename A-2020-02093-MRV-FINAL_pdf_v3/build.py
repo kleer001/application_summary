@@ -13,7 +13,8 @@ from combine import combine_field, heading_disputes, union_conditions
 from ids import corrected, file_no_of, stem_of
 from norm import norm
 from paths import complete_stems
-from verify import VERIFIED, check_conditions, check_field, load_pages, verdicts_for
+from verify import (VERIFIED, check_conditions, check_field, load_pages,
+                    on_cited_page, verdicts_for)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,7 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # "-" is a column this rebuild cannot support from the documents.
 PRIOR = [
     ("Source_Part", "-"), ("Source_File", "-"),
-    ("DFO_File_or_PATH", "file_number"),
+    ("DFO_File_or_PATH", "@file_number"),
     ("Authorization_Date", "date_of_issuance"),
     ("Authorization_Issue_Year", "@issue_year"),
     ("Amendment_Date", "@amendment_date"), ("Amendment_Year", "@amendment_year"),
@@ -231,10 +232,26 @@ def read_document(order, queue):
                 e = ruling["entries"][0]
                 c["text"] = e.get("value", c.get("text"))
                 c["page"] = abs_page(e.get("page"), order["first_page"]) or c.get("page")
-                c["source"] = e.get("source", "image")
+                # Whether the text layer carries this text is a fact about the
+                # page, not a thing an adjudicator gets to assert. Six conditions
+                # were failing the workbook check on exactly this: pass C read
+                # them off the scan -- it had to, the text layer has a severance
+                # stamp or a bullet spliced through the sentence -- and then
+                # recorded source "both", which holds the value to a text layer
+                # that does not carry it. An adjudicator that said nothing got
+                # the "image" default and passed, so the check was rewarding
+                # silence and punishing the ones that answered. Ask the page.
+                rel, folded = e.get("page"), load_pages(order["slice"])
+                established = (isinstance(rel, int) and rel in folded
+                               and bool(on_cited_page(c["text"], folded, rel)))
+                claimed = e.get("source", "image")
+                c["source"] = claimed if established else "image"
                 queue.append({
                     "document": order["doc_id"], "field": name,
-                    "why": f'pass C located it: {ruling.get("reason", "")[:110]}',
+                    "why": (f'pass C located it: {ruling.get("reason", "")[:110]}'
+                            if established or claimed == "image" else
+                            f'pass C located it off the scan, having recorded '
+                            f'"{claimed}"; the text layer does not carry it'),
                     "resolved": True, "reason": "condition_located"})
                 continue
             if ruling and ruling.get("winner") == "absent":
@@ -321,6 +338,25 @@ def merge_documents(docs, discrepancies):
 INFERRED = " (i)"
 
 
+def _file_number(row, *_):
+    """The row's identifier, which is the one cell that cannot be left empty.
+
+    Normally the quoted field, and unchanged where it verifies. Where it does
+    not, the row still has to be filed under something. 20-HMAR-00098#651 is the
+    case: both readers quote "PATH No.: 20-HMAR-00098" off page 1 at high
+    confidence, the quote fails against the text layer, the field is withheld as
+    every unverified field is -- and the row ships with no name. A compliance
+    record whose subject is unnamed cannot be looked up, and its 24 conditions,
+    which are keyed on the file number, then belong to no row at all.
+
+    So the fallback is the key the row is already filed under, which the
+    segmentation of the release established independently of any reader, marked
+    inferred because it is not a quote from a page. The unverified field stays on
+    Review_Queue: this names the row, it does not settle the disagreement.
+    """
+    return cell(row["fields"].get("file_number") or []) or (row_key(row) + INFERRED)
+
+
 def _issue_date(row):
     e = row["fields"].get("date_of_issuance") or []
     return str(e[0]["value"]) if e else None
@@ -398,6 +434,7 @@ def _project_type(row, _, labels):
 
 
 DERIVED = {
+    "@file_number": _file_number,
     "@setting": _setting,
     "@project_type": _project_type,
     "@issue_year": lambda row, *_: (_issue_date(row) or "")[:4] or None,
@@ -418,6 +455,12 @@ DERIVED = {
     "@page_anchor": _page_anchor,
     "@qa_flag": _qa_flag,
 }
+
+# A derivation that stands in for a field of the same name. The column is
+# derived, but the field is spoken for, and without this it counts as a field no
+# column claims and is appended again on the right -- which shifts every column
+# after it and moves 2722 cells one place along.
+SPEAKS_FOR = {"@file_number": "file_number"}
 
 # Pass D vocabularies that get their own column, to the right of the prior layout.
 VOCABULARIES = ["activity", "sector", "setting", "waterbody", "habitat_features",
@@ -536,6 +579,7 @@ def write_workbook(rows, docs, queue, discrepancies, spec, out_path, labelled=No
     labelled = labelled or {}
     docrows = by_document(rows)
     used = {src for _, src in PRIOR if not src.startswith(("@", "-"))}
+    used |= {SPEAKS_FOR[src] for _, src in PRIOR if src in SPEAKS_FOR}
     extended = [n for n in spec if n not in used]
     queue_by_fn = defaultdict(list)
     for q in queue:

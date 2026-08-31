@@ -5,7 +5,7 @@ say the same thing. If they ever fold differently, a value passes one check unde
 one rule and is judged under another, and nothing reports it. This module is the
 rule.
 """
-import re
+import re, unicodedata
 
 # m2 renders every one of these ways in the scan. The letter variant is matched
 # only outside a word, or "monitoring" folds to "m2nitoring" and "confirm
@@ -22,13 +22,52 @@ SQ = r"m\s*[2²?7*°~^’'”\"″]|m\s*o(?![a-z])"
 ORD = r"(?<=\d)(st|nd|rd|th)\b"
 
 
+def deaccent(s):
+    """Accented letters folded to the base letter, not dropped.
+
+    The fold that follows keeps only a-z0-9, which deletes an accented letter
+    outright. That is only safe while both sides of a comparison carry the same
+    accent, and in this release they routinely do not: the scanner drops accents
+    it cannot resolve, so page 430 of 19-HQUE-00077 reads "et a la satisfaction
+    du MPO" where the reader, working from the scan, correctly wrote "et a la"
+    with the accent. Deleting one and keeping the other makes the same words
+    fold to "lasatisfaction" and "alasatisfaction", and the quote is judged not
+    to be on its own page.
+
+    Folding to the base letter makes the two agree. It cannot make two different
+    words agree, because French words are not distinguished by accent alone
+    anywhere this corpus cares about, and it costs nothing where the accent
+    survived: both sides fold the same way.
+
+    Letters only, and deliberately. A whole-string NFKD also rewrites the
+    superscripts, and `m3` for cubic metres then collides with the `m2` spellings
+    SQ above is tuned to collapse: measured over the corpus that alone cost a
+    monitoring figure its verification. Digits, superscripts and symbols are left
+    exactly as they were.
+
+    What this cannot repair is the scanner dropping an accented letter outright
+    rather than flattening it -- "Iles-de-la-Madeleine" read as "es-de-la-
+    Madeleine". Matching that needs a missing character to be free, which is the
+    edit-distance bar `on_page` was measured against and does not clear.
+    """
+    out = []
+    for c in str(s):
+        if c.isalpha() and not c.isascii():
+            d = "".join(ch for ch in unicodedata.normalize("NFKD", c)
+                        if not unicodedata.combining(ch))
+            out.append(d if d.isascii() else c)
+        else:
+            out.append(c)
+    return "".join(out)
+
+
 def norm(s):
     """Letters and digits only, with m2 spellings and date ordinals collapsed.
 
     Numeric fidelity is deliberately not preserved here; verify.digits_present
     checks that separately against the unfolded quote.
     """
-    s = re.sub(SQ, " m2 ", str(s).lower())
+    s = re.sub(SQ, " m2 ", deaccent(s).lower())
     s = re.sub(ORD, "", s)
     return re.sub(r"[^a-z0-9]+", "", s)
 
@@ -48,7 +87,7 @@ def wordset(s):
     "Paragraph" against "Paragraphs" and "measure" against "measures" are the
     same word and the plural is the writer's, not the document's.
     """
-    s = re.sub(SQ, " m2 ", str(s).lower())
+    s = re.sub(SQ, " m2 ", deaccent(s).lower())
     s = re.sub(ORD, "", s)
     out = set()
     for w in re.findall(r"[a-z0-9]+", s):
@@ -58,7 +97,7 @@ def wordset(s):
 
 def tokens(s):
     """Words of three or more characters, which is what survives OCR intact."""
-    return [t for t in re.findall(r"[a-z0-9]+", str(s).lower()) if len(t) > 2]
+    return [t for t in re.findall(r"[a-z0-9]+", deaccent(s).lower()) if len(t) > 2]
 
 
 def on_page(quote, page_folded, page_tokens, threshold=0.9):
