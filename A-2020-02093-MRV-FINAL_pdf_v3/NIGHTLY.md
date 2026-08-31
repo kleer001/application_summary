@@ -1,8 +1,8 @@
 # One night of reading
 
 You are running one scheduled piece of a long extraction. Follow this exactly.
-This file and `nightly.json` are the whole of the procedure; `PLAN-v3.md` says
-what the pipeline is for, and you do not need it to do the work.
+This file and `nightly.json` are the whole of the procedure. `RUN-PLAN.md` in the
+repository root says why it is shaped this way; you do not need it to do the work.
 
 Everything you need is in this repository. Do not look for the source release: it
 is 340 MB and is not here. The documents have already been cut into per-document
