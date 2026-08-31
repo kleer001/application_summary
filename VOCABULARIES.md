@@ -132,6 +132,10 @@ This is what makes conditions searchable on their own. Every numbered condition
 gets one, so you can ask for in-water timing windows across a region without
 reading the authorizations around them.
 
+Unlike the categories above, this one is assigned while the document is being
+read rather than sorted afterwards, because the reader is already looking at the
+condition. It lands in the `Topic` column of the `Conditions` sheet.
+
 ### Free from the file number
 
 Region comes straight out of the PATH number, so it needs no sorting: `HPAC`
@@ -172,6 +176,14 @@ Tell us what you'd expect to see that isn't there.
 exactly one Indigenous proponent, which is our matching being crude rather than
 anything true about the release. The categories look right. The counts don't
 mean anything yet.
+
+**A labelling run says municipal drains need a term.** Where a row fits none of
+the terms offered, a labeller writes the value's own words rather than forcing
+the nearest match, and a term that collects several of those is a term the list
+is missing. Over 54 rows, three landed on municipal drains — Young Drain, Van
+Gaal Drain, McNamara Municipal Drain — which the waterbody list has no home for.
+The others were one-offs: a university proponent, two French demolition works, a
+landing ramp. The drains look like a real class; the rest may just be rare.
 
 **We haven't grouped the numbers yet.** Searching by size means putting things
 in buckets — under 100 m², 100 to 1,000, and so on. Where you draw those lines

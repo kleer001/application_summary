@@ -9,6 +9,8 @@ the release; `qc.py` is the gate that says whether a workbook may be trusted.
 wave.py   <sandbox> --split tune     stage documents, write the work order
   readers                            two per document per pass, model named in the order
   adjudicators                       one per conflict the mechanical rules could not settle
+passd.py  <sandbox> <out.xlsx>       vocabularies and rows for the labellers
+  labellers                          one per vocabulary, each given every row
 build.py  <sandbox> <out.xlsx>       combine, merge, write the workbook
 qc.py     <sandbox> <out.xlsx>       control on the artifact, assurance on the run
 status.py <sandbox>                  what the wave still owes
@@ -68,8 +70,9 @@ going looking. Keep the run directory shallow — `tmp/w1`, not a nested path.
 ## What is known-incomplete
 
 - The tuning half is partly read; the holdout is untouched.
-- Pass D — the controlled vocabularies — has not run, so `Project_Type` and
-  `Aquatic_Setting` are empty by design.
+- Pass D labels only the rows built at the time it ran. A row read afterwards
+  carries no label until the pass is run again, and the pass replaces every
+  label rather than adding to them.
 - `Supporting_Documents` is a finding aid, not extraction. The segmenter cannot
   reach those documents — it looks for an "issued to" block they do not have — so
   their titles and page ranges are recorded by hand in `supporting_documents.json`

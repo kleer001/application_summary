@@ -19,7 +19,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The prior summary's 30 columns, in its order, each naming what fills it.
 # A field name reads that field; "@" runs the derivation of that name below;
-# "-" is a column this rebuild cannot support from the documents.
+# "-" is a column no page can answer.
+#
+# The three marked "-" are not extraction failures. `Source_Part` and
+# `Source_File` name which file of the split release a copy arrived in, which is
+# a fact about delivery and is printed on no page. `Review_Notes` is where a
+# reviewer writes. Nothing in the release can fill any of them.
 PRIOR = [
     ("Source_Part", "-"), ("Source_File", "-"),
     ("DFO_File_or_PATH", "file_number"),
@@ -419,10 +424,12 @@ DERIVED = {
     "@qa_flag": _qa_flag,
 }
 
-# Pass D vocabularies that get their own column, to the right of the prior layout.
-VOCABULARIES = ["activity", "sector", "setting", "waterbody", "habitat_features",
-                "proponent_type", "offsetting_approach", "species_at_risk",
-                "financial_security"]
+# Vocabularies that get a column of their own. The workbook reproduces the prior
+# summary's layout, and that layout has no column for a controlled term, so this
+# is empty: a label reaches the sheet only through `Aquatic_Setting` and
+# `Project_Type`, which the prior summary does have and which `_setting` and
+# `_project_type` derive from the setting, activity and sector labels.
+VOCABULARIES = []
 
 
 def label_cell(terms):
