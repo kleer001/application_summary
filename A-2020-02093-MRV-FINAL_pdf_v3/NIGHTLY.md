@@ -1,12 +1,17 @@
 # One night of reading
 
 You are running one scheduled piece of a long extraction. Follow this exactly.
-`RUN-PLAN.md` in the repository root says why it is shaped this way; you do not
-need it to do the work.
+This file and `nightly.json` are the whole of the procedure. `RUN-PLAN.md` in the
+repository root says why it is shaped this way; you do not need it to do the work.
 
 Everything you need is in this repository. Do not look for the source release: it
 is 340 MB and is not here. The documents have already been cut into per-document
 excerpts under `staged/`, and that is all a reader ever sees.
+
+Those staged inputs were committed once and are never regenerated. Staging is
+deterministic, so a regenerated file is byte-identical and adds only a second
+copy to history; deleting one reclaims nothing, for the same reason. Do not
+regenerate them and do not delete them.
 
 ## 0. Make the scans readable
 
@@ -167,9 +172,13 @@ is next built; one that cannot be found there is discarded and the conflict
 stands. So there is nothing to review here, and nothing to take back into your
 context.
 
-A conflict is listed only while no ruling for it exists, and only while both of
-its reads are on a contract still in force. Documents waiting to be re-read are
-held back rather than settled against answers that are about to change.
+A conflict is listed only while no ruling for it exists. It is *not* held back
+when its reads were taken under an earlier contract: `passc.py` counts those and
+prints the count, and adjudicates them anyway. This file used to claim they were
+held back, which stopped being true when selection stopped acting on staleness --
+a read already on disk describes its page and is never re-taken by a night. The
+stamp is a log of what produced an answer, not a gate on using it. Re-reading is
+a decision taken deliberately, outside the nightly.
 
 ## 5. Confirm from the files, not from memory
 
