@@ -219,7 +219,14 @@ Report it and stop; do not merge, rebase or force.
 
 A night is more than one round of this procedure. `nightly.py --status` prints
 `rounds this night`; you have just finished one. **If rounds remain, go back to
-step 1 and work through to here again.** Skip step 0 — the scans are already
+step 1 and work through to here again. If none remain, stop — even where reads
+are still outstanding and the queue is not empty.**
+
+That number is a decision, not a target. It is set from whether the pipeline is
+producing clean nights, because reading faster finds defects faster than they get
+fixed, and a night that runs an extra round has overruled that judgement without
+anyone seeing it. The night of 1 September ran two rounds where this said one. It
+came back clean, which is luck rather than licence. Skip step 0 — the scans are already
 readable — and leave the report until the last round is done, since it covers the
 night rather than the round.
 
@@ -249,4 +256,6 @@ documents said and do not report what any adjudicator decided.
 - Do not open the prior summary workbook. It is a test set, and nothing but
   `score.py` may read it.
 - Do not raise `documents_per_night`, `rounds_per_night` or
-  `adjudications_per_night` in `nightly.json` on your own initiative.
+  `adjudications_per_night` in `nightly.json` on your own initiative, and do not
+  work past them either. Running a further round is the same act as raising the
+  number, minus the record of having done it.
