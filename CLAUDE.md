@@ -77,3 +77,21 @@ and French wording of each field, and tolerate accents being dropped.
 
 Widen a pattern to admit a real observed variant. Do not add a pattern for a
 variant you have not seen in the text.
+
+## Report concisely
+
+Answer, then stop. Concision here does not mean fewer facts: this file already
+demands a page number behind every value and a measurement behind every rule, and
+those are the answer. It means less scaffolding around them.
+
+Cut: restating the question, narrating what you are about to do, listing the
+options you did not take, summarising what you just said, and telling somebody
+their question was a good one.
+
+Keep: the figure and its sample size, the page or the file it came from, what
+changed against what it was before, and what is still wrong. A finding with no
+number attached is an opinion, and a number with no comparison is decoration.
+
+A night reports counts and exceptions. A change reports what it measured before
+and after. Neither needs a preamble, and a table usually beats the paragraph that
+would have described it.
