@@ -22,10 +22,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # A field name reads that field; "@" runs the derivation of that name below;
 # "-" is a column no page can answer.
 #
-# The three marked "-" are not extraction failures. `Source_Part` and
-# `Source_File` name which file of the split release a copy arrived in, which is
-# a fact about delivery and is printed on no page. `Review_Notes` is where a
-# reviewer writes. Nothing in the release can fill any of them.
+# The two marked "-" are not extraction failures. `Source_Part` and `Source_File`
+# name which file of the split release a copy arrived in, which is a fact about
+# delivery and is printed on no page.
+#
+# `Review_Notes` was the third. It is the column for what a reader of a row needs
+# to know that no cell can carry -- a document that contradicts itself, a date the
+# release states twice -- and it was empty in every build, which left those facts
+# living only in known_bad_values.md where nobody holding the workbook would find
+# them. It is filled from review_notes.json now. Anything typed into the sheet by
+# hand is still lost on the next build, as it is in every column; that is the
+# reason the notes live in a tracked file rather than in the spreadsheet.
 PRIOR = [
     ("Source_Part", "-"), ("Source_File", "-"),
     ("DFO_File_or_PATH", "@file_number"),
@@ -51,7 +58,7 @@ PRIOR = [
     ("Monitoring_Requirements", "@monitoring"),
     ("Contingency_Measures", "@contingency"),
     ("Include_in_2021_Request", "@include_2021"),
-    ("QA_Flag", "@qa_flag"), ("Review_Notes", "-"),
+    ("QA_Flag", "@qa_flag"), ("Review_Notes", "@review_notes"),
     ("Source_Reference_ID", "@page_anchor"),
 ]
 
@@ -362,6 +369,26 @@ def _file_number(row, *_):
     return cell(row["fields"].get("file_number") or []) or (row_key(row) + INFERRED)
 
 
+@functools.lru_cache(maxsize=1)
+def _review_notes_file():
+    return {k: v for k, v in
+            json.load(open(os.path.join(HERE, "review_notes.json"))).items()
+            if not k.startswith("_")}
+
+
+def _review_notes(row, *_):
+    """What a person reading this row has to be told, and no cell can say.
+
+    A settled disposition rather than an open question: where the release
+    contradicts itself, this records which value stands and why, with the pages,
+    so that the next reader does not re-derive the arithmetic and reach the same
+    dead end. Marked inferred, because it is prose about the document rather than
+    a quote from it.
+    """
+    entry = _review_notes_file().get(row["documents"][0]["file_number"])
+    return entry["note"] + INFERRED if entry else None
+
+
 def _issue_date(row):
     e = row["fields"].get("date_of_issuance") or []
     return str(e[0]["value"]) if e else None
@@ -440,6 +467,7 @@ def _project_type(row, _, labels):
 
 DERIVED = {
     "@file_number": _file_number,
+    "@review_notes": _review_notes,
     "@setting": _setting,
     "@project_type": _project_type,
     "@issue_year": lambda row, *_: (_issue_date(row) or "")[:4] or None,

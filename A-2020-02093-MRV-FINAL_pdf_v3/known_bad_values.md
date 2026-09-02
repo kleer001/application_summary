@@ -7,6 +7,18 @@ are resolved by hand before the holdout is scored.
 Each entry states what the release says, on which page, so the resolution can be
 checked rather than taken on trust.
 
+**These no longer wait on anybody.** Every disposition below is carried in
+`review_notes.json` and reaches two places: the `Review_Notes` column of the
+workbook, so a reader of a row is told what the release does and does not settle;
+and `score.py`, which lists any disagreement resting on one of these test values
+under "counted wrong, against a test value the release contradicts".
+
+They are reported there and never subtracted. A scorer that drops the cells it
+disagrees with measures nothing, so the total still counts them as wrong -- what
+changes is that the ceiling they put on the result is visible and attributable
+rather than silently absorbed. Three of the corpus's 53 disagreements are of this
+kind, one of them in the holdout.
+
 ## 18-HCAA-00233 — date of issuance
 
 | | |

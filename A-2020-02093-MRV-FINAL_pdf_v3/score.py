@@ -4,7 +4,7 @@ human-filled workbook on the fields the workbook happens to carry.
 The workbook is the test set and is read only here, at the top layer. Nothing
 in this file is ever shown to a reader.
 """
-import json, re, sys, os, unicodedata
+import functools, json, re, sys, os, unicodedata
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -77,6 +77,23 @@ MAP = {
 }
 
 
+@functools.lru_cache(maxsize=1)
+def known_bad():
+    """Test values the release itself contradicts, by file number and field.
+
+    The prior workbook is the test set, and a handful of its cells disagree with
+    the document they describe -- a date the release states twice, a total that
+    does not match its own breakdown. Scoring against them puts a ceiling on the
+    result that is not the extractor's, and the dispositions are recorded in
+    review_notes.json with the pages they rest on.
+    """
+    path = os.path.join(HERE, "review_notes.json")
+    if not os.path.exists(path):
+        return {}
+    return {k: tuple(v.get("fields") or ())
+            for k, v in json.load(open(path)).items() if not k.startswith("_")}
+
+
 def truth_rows():
     import openpyxl
     ws = openpyxl.load_workbook(XLSX)["Authorization_Summary"]
@@ -142,6 +159,7 @@ def main(sandbox, half="tune"):
     ver = Counter()
     agree = Counter()
     skipped = Counter()
+    contradicted = []
     complete = complete_stems(sandbox)
     unread = {corrected(o["stem"], o["file_number"]) for o in orders
               if o["stem"] not in complete}
@@ -190,6 +208,13 @@ def main(sandbox, half="tune"):
             # as a wrong answer measures the opposite of what the rule intends.
             outcome = "hit" if ok else ("blank" if not entries else "wrong")
             agree[f"{f}:{outcome}"] += 1
+            # A disagreement against a test value the release itself contradicts
+            # is recorded, never subtracted. It still counts as wrong in the
+            # total, because a scorer that drops the cells it disagrees with
+            # measures nothing; but the ceiling it puts on the result is not the
+            # extractor's, and the reader of a score is owed that separately.
+            if not ok and f in known_bad().get(doc, ()):
+                contradicted.append((doc, f, str(t)[:30], str(g)[:30]))
             if not ok:
                 detail.append((doc, f, str(t)[:34],
                                "(withheld)" if outcome == "blank" else str(g)[:34],
@@ -213,6 +238,13 @@ def main(sandbox, half="tune"):
     if n:
         print(f"   {'TOTAL':22s} {tot['hit']:7d} {tot['wrong']:6d} {tot['blank']:9d}   "
               f"{tot['hit']/n:7.0%}")
+
+    if contradicted:
+        print("\n=== counted wrong, against a test value the release contradicts ===")
+        print("    Reported, not subtracted. See review_notes.json for the pages.")
+        for doc, f, t, g in contradicted:
+            print(f"   {doc:16s} {f:22s} workbook={t:32s} extracted={g}")
+        print(f"   {len(contradicted)} of {tot['wrong']} disagreements")
 
     if skipped:
         print("\n=== not testable: the workbook value is not an answer to this field ===")
