@@ -26,10 +26,32 @@ contract they were taken under, so a retirement can be read back and undone.
     retire.py <sandbox> --stale                 every read on a superseded stamp
     retire.py <sandbox> --stale --pass b        the condition reads only
     retire.py <sandbox> --stale --split tune    the tuning half only
+    retire.py <sandbox> --failed                withdraw rulings that failed their check
+
+`--failed` is the one case where a ruling goes and its reads stay. A
+`passc_failed_check` entry means pass C answered and the answer did not verify
+against the page it cited: the readers are not at fault and re-reading them would
+answer a question nobody asked. Withdrawing the ruling is what lets the conflict
+be put to an adjudicator again, because `passc.py` skips anything already ruled.
+
+Nothing here is automatic, and it must not become so. A withdrawal that fails
+again re-enters the queue as the same kind of entry, so a rule that withdrew them
+on sight would put two agents in a loop that no output would show. The retry is
+visible instead: a ruling withdrawn a second time is filed as `.ruling.2.json`, so
+the count is in the filename and a third one is a signal to read the page rather
+than ask again.
 
 Prints what it would do and changes nothing unless `--yes` is given.
+
+**A copy of a sandbox is not a sandbox.** `wave.json` records an absolute-ish
+`out` path per read, and `build.read_document` takes both the reader directory and
+the sandbox holding the rulings from it -- so `cp -r run2 elsewhere` produces a
+directory whose selection scripts read the copy while everything downstream reads
+the original. A retirement tested there moves the copy's files and then appears to
+have no effect, because the build never looked at them. Repoint `out` in the
+copy's `wave.json` before trusting anything an experiment there tells you.
 """
-import json, os, shutil, sys
+import json, os, re, shutil, sys
 
 from ids import corrected
 from stamp import live, stamp_of
@@ -44,6 +66,23 @@ def rests_on(field):
 
 def tags_for(which):
     return {"a": PASS_A, "b": PASS_B, "both": PASS_A + PASS_B}[which]
+
+
+def failed_rulings(sandbox):
+    """Rulings whose own answer did not verify, from the queue that says so."""
+    path = f"{sandbox}/conflicts.json"
+    if not os.path.exists(path):
+        return []
+    out = []
+    for c in json.load(open(path)):
+        if c.get("reason") != "passc_failed_check":
+            continue
+        stem = c["document"].replace("#", "_")
+        slug = re.sub(r"[^a-z0-9]+", "_", str(c["field"]).lower()).strip("_")
+        name = f"{stem}.{slug}.json"
+        if os.path.exists(f"{sandbox}/adjudicated/{name}"):
+            out.append((stem, name, c["field"]))
+    return out
 
 
 def stale_reads(sandbox):
@@ -92,7 +131,25 @@ def move(sandbox, reads, rulings):
         shutil.move(src, f"{sup}/{stem}.{tag}.{stamp_of(src)}.json")
     for stem, name, _ in rulings:
         src = f"{sandbox}/adjudicated/{name}"
-        shutil.move(src, f"{sup}/{name[:-5]}.ruling.json")
+        base, n = f"{sup}/{name[:-5]}.ruling", 1
+        dst = f"{base}.json"
+        while os.path.exists(dst):
+            n += 1
+            dst = f"{base}.{n}.json"
+        shutil.move(src, dst)
+
+
+def report(reads, rulings):
+    print(f"{len(reads)} reads over {len({s for s, _ in reads})} documents, "
+          f"and {len(rulings)} rulings")
+    for stem, tag in reads[:10]:
+        print(f"   read   {stem}.{tag}")
+    if len(reads) > 10:
+        print(f"   ... and {len(reads) - 10} more")
+    for stem, name, field in rulings[:10]:
+        print(f"   ruling {name}   ({field})")
+    if len(rulings) > 10:
+        print(f"   ... and {len(rulings) - 10} more")
 
 
 def main():
@@ -107,6 +164,18 @@ def main():
         raise SystemExit("--pass takes a, b or both")
 
     passes = {"a", "b"} if which == "both" else {which}
+    if "--failed" in argv:
+        rulings = failed_rulings(sandbox)
+        reads = []
+        report(reads, rulings)
+        if "--yes" not in argv:
+            print("\nnothing moved. pass --yes to withdraw these.")
+            return
+        move(sandbox, reads, rulings)
+        print(f"\nwithdrawn to {sandbox}/superseded/. passc.py will offer these "
+              f"to an adjudicator again on the next round.")
+        return
+
     if "--stems" in argv:
         wanted = {s.strip(): set(passes)
                   for s in opt("--stems").split(",") if s.strip()}
@@ -133,16 +202,7 @@ def main():
                   if corrected(s, s.rsplit("_", 1)[0]) in keep}
 
     reads, rulings = plan(sandbox, wanted)
-    print(f"{len(reads)} reads over {len({s for s, _ in reads})} documents, "
-          f"and {len(rulings)} rulings resting on them")
-    for s, t in reads[:10]:
-        print(f"   read   {s}.{t}")
-    if len(reads) > 10:
-        print(f"   ... and {len(reads) - 10} more")
-    for s, n, f in rulings[:10]:
-        print(f"   ruling {n}   ({f})")
-    if len(rulings) > 10:
-        print(f"   ... and {len(rulings) - 10} more")
+    report(reads, rulings)
 
     if "--yes" not in argv:
         print("\nnothing moved. pass --yes to retire these.")
