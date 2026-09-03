@@ -9,6 +9,7 @@ import json, os, sys
 import openpyxl
 
 from ids import FILE_RX
+from paths import prior_summary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHEET = "Authorization_Summary"
@@ -39,8 +40,7 @@ def link(xlsx, segs_path=None):
 
 
 if __name__ == "__main__":
-    xlsx = sys.argv[1] if len(sys.argv) > 1 else \
-        json.load(open(os.path.join(HERE, "release.json")))["prior_summary"]
+    xlsx = sys.argv[1] if len(sys.argv) > 1 else prior_summary()
     out = link(xlsx)
     json.dump(out, open(os.path.join(HERE, "prior_rows.json"), "w"), indent=1)
     print(f"  matched      {len(out['matched'])} file numbers to prior rows")

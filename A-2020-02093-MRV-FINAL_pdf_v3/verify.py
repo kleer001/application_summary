@@ -181,7 +181,19 @@ def check_field(name, f, folded, n):
             bad.append(f"[{i}] value with no quote")
         elif not isinstance(pg, int) or not (1 <= pg <= n):
             bad.append(f"[{i}] page {pg} outside 1-{n}")
-        elif not (how := on_page(q, *page_of(folded, pg)[:2])):
+        # The same page-break allowance a condition already gets. A field's quote
+        # straddles a break as readily as a requirement does -- a monitoring
+        # clause beginning at the foot of one page and finishing at the head of
+        # the next -- and testing it against one page alone rejected it for
+        # something the document did no wrong in doing. 20-HGLF-00075's death of
+        # fish clause is the case: it breaks across the seam and the page carries
+        # a Bates stamp, "Canada 001203", where the sentence continues.
+        #
+        # Measured over the corpus's 10,836 field entries: 47 gain a pass and
+        # none loses one. The join is offered to exact containment only, never to
+        # the fuzzy fallback, which is the distinction on_cited_page was measured
+        # against and which handing two pages to a token threshold would undo.
+        elif not (how := on_cited_page(q, folded, pg)):
             # A quote marked `image` is a claim that the text layer does not
             # carry it. Finding the same words on another page of that layer does
             # not refute the claim — a short phrase like a job title recurs, and

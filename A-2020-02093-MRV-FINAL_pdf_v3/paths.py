@@ -11,7 +11,7 @@ The repository-root rule is the one that bit. `status.py` read the work order's
 directory it reported 516 of 516 reads outstanding — no error, just a confident
 account of a corpus it could not see.
 """
-import os
+import json, os
 from collections import Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +21,31 @@ FIELD_READS = ("a1", "a2")          # pass A: the fields, two independent reader
 CONDITION_READS = ("b1", "b2")      # pass B: the conditions
 ALL_READS = FIELD_READS + CONDITION_READS
 READS_PER_DOCUMENT = len(ALL_READS)
+
+
+def prior_summary():
+    """The prior workbook, wherever this clone keeps it.
+
+    release.json records the path the release was built from, which is absolute
+    and on one machine. Every clone still has the file, under the release
+    directory at the repository root, so look for it there rather than failing
+    with a path nobody else can have. Scoring that only runs on the author's
+    laptop is scoring that does not run -- and so is a link between file numbers
+    and prior rows, which is what `prior_rows.py` was doing: it read the recorded
+    path straight out of release.json and died on a clone.
+
+    Here rather than in score.py because two modules need it and this is where
+    the pipeline's path rules live.
+    """
+    recorded = json.load(open(os.path.join(HERE, "release.json")))["prior_summary"]
+    if os.path.exists(recorded):
+        return recorded
+    name = os.path.basename(recorded)
+    for base, dirs, files in os.walk(ROOT):
+        dirs.sort()
+        if name in files:
+            return os.path.join(base, name)
+    return recorded
 
 
 def resolve(path):

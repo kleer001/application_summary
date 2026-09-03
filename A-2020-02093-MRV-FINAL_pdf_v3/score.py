@@ -11,30 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build import assemble
 from ids import FILE_RX, corrected
 from norm import norm
-from paths import ROOT, complete_stems
+from paths import ROOT, complete_stems, prior_summary
 from verify import check
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-
-
-def prior_summary():
-    """The workbook, wherever this clone keeps it.
-
-    release.json records the path the release was built from, which is absolute
-    and on one machine. Every clone still has the file, under the release
-    directory at the repository root, so look for it there rather than failing
-    with a path nobody else can have. Scoring that only runs on the author's
-    laptop is scoring that does not run.
-    """
-    recorded = json.load(open(os.path.join(HERE, "release.json")))["prior_summary"]
-    if os.path.exists(recorded):
-        return recorded
-    name = os.path.basename(recorded)
-    for base, dirs, files in os.walk(ROOT):
-        dirs.sort()
-        if name in files:
-            return os.path.join(base, name)
-    return recorded
 
 
 XLSX = prior_summary()
