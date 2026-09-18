@@ -100,30 +100,40 @@ periods. Guessing produces confident, wrong dates.
 **Classification.** Aquatic setting and project type are inferred from vocabulary
 and marked with a trailing `(i)`. Good enough to sort and filter, not to cite.
 
-## Identifier formats
+## The scripts (`pipeline/`)
 
-Two generations appear in these releases:
+Run in this order. Every text value each writes is a verbatim quote that carries
+its source page.
 
-- `NN-HXXX-NNNNN` — current
-- `NN-HXXX-PAN-NNNNN` — older, with an extra regional segment
-
-Quebec documents also carry a provincial authorisation number
-(`N° d'autorisation : YYYY-NNN`) and are sometimes identified by that alone.
-
-The `HXXX` segment is the DFO region, and it maps onto provinces without
-exception across the corpus this was built on:
-
-| Code | Region | Provinces seen |
+| Script | What it does | Why |
 |---|---|---|
-| HPAC | Pacific | British Columbia, Yukon |
-| HCAA | Central and Arctic | Ontario, Alberta, Manitoba, Saskatchewan, Nunavut, Northwest Territories |
-| HGLF | Gulf | New Brunswick, Prince Edward Island |
-| HMAR | Maritimes | Nova Scotia |
-| HNFL | Newfoundland and Labrador | Newfoundland and Labrador |
-| HQUE | Quebec | Quebec |
+| `segment.py` | Splits the OCR text into documents and maps each to a spreadsheet row. | The package is one long scan; extraction needs document boundaries first. |
+| `extract.py` | Pulls structured fields from a document's whitespace-normalised text. | OCR wraps headings across lines, so line-anchored patterns miss them. |
+| `build_new.py` | Builds a workbook from a release that has no prior spreadsheet. | Same column set as a reconciled workbook, so releases concatenate. |
+| `build_v2.py` | Fills an existing workbook: page anchors, quoted conditions, split units, resolved identifiers, a numeric queue. | Reconcile against the source without touching a cell that already holds a value. |
+| `annotate.py` | Second pass: amendment rows, inferred classes, verification notes, a Discrepancies sheet. | A disagreement is recorded beside the original figure, never substituted for it. |
+| `polish.py` | Refreshes the Overview stats and writes the Methodology sheet. | The workbook states how it was built. |
+| `make_overviews.py` | Writes a per-folder HTML overview and a root index. | A reader checks a row against a page without opening the PDF. |
+| `build_guidebook.py` | Indexes a technical guidebook: numbered sections and the guidance modality. | A guidebook needs a different schema but the same page-cite rule. |
 
-`build_new.py` derives a `Region` column from this and flags any row whose
-province falls outside its region.
+The `_pdf_v2/` and `_pdf_v3/` folders hold an earlier copy of the pipeline and a
+separate LLM multi-reader pipeline, kept as worked examples.
+
+## Claude tooling (`.claude/`)
+
+The multi-reader pipeline reads each document with a model instead of a regex.
+Two readers read every document, and their agreement is the confidence signal.
+
+| Agent | What it does | Why |
+|---|---|---|
+| `page-reader` | Reads one segmented document and records its fields against a staged contract. | A model reads a title line or a stamped figure that OCR breaks and a pattern misses. |
+| `wave-orchestrator` | Spawns two `page-reader` agents per document and reports per-field agreement. | Two independent reads catch a single reader's error; agreement grades the row. |
+| `labeller` | Sorts extracted values onto one controlled vocabulary, after extraction. | Classification stays separate from reading, so a label error cannot corrupt a quote. |
+
+| Skill | What it does | Why |
+|---|---|---|
+| `spec-lint` | Reviews a field spec for questions two readers would answer differently. | An ambiguous question, not a weak reader, is the usual cause of disagreement, and it is cheaper to fix before a run. |
+| `copy/plain`, `copy/humanize` | Project overlays for the report-writing skills: domain terms and banned constructions. | Delivered prose stays in one register for a consultancy audience. |
 
 ## Things that will bite you
 
